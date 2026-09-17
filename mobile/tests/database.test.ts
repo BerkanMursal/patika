@@ -62,6 +62,12 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         'utf8',
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL('../../supabase/migrations/202609180001_leaderboard.sql', import.meta.url),
+        'utf8',
+      ),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -1166,6 +1172,139 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
           ]),
           /Gözlem sınırına ulaşıldı/,
         );
+      });
+    });
+    await t.test(
+      'get_leaderboard: only active points count (hidden/deleted feeding excluded, observation included), display_name visible cross-user',
+      async () => {
+        const erin = 'fd111111-1111-4111-8111-111111111111';
+        await db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2)', [
+          erin,
+          JSON.stringify({ display_name: 'Erin Puan Testi' }),
+        ]);
+        const keptFeedId = 'fd222222-2222-4222-8222-222222222222';
+        const deletedFeedId = 'fd333333-3333-4333-8333-333333333333';
+        const hiddenFeedId = 'fd444444-4444-4444-8444-444444444444';
+        let reportId = '';
+        await asUser(erin, async () => {
+          for (const feedId of [keptFeedId, deletedFeedId, hiddenFeedId]) {
+            const photoPath = `${erin}/${feedId}.jpg`;
+            await db.query(
+              "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+              [photoPath, erin],
+            );
+            await db.query('select public.submit_feeding($1::jsonb)', [
+              JSON.stringify(feedingPayload(feedId, erin, photoPath, 41, 29)),
+            ]);
+          }
+          await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+            locPoint,
+            'full',
+            'full',
+            '',
+            41,
+            29,
+          ]);
+          await db.query('select public.remove_feeding($1)', [deletedFeedId]);
+          await db.query('select public.report_item($1,$2,$3,$4)', [
+            'abuse',
+            'Test report for leaderboard hide flow.',
+            null,
+            hiddenFeedId,
+          ]);
+          reportId = (
+            await db.query<{ id: string }>(
+              'select id from public.reports where feeding_id=$1 order by created_at desc limit 1',
+              [hiddenFeedId],
+            )
+          ).rows[0].id;
+        });
+        await asUser(
+          bob,
+          async () => {
+            await db.query('select public.resolve_report($1,true)', [reportId]);
+          },
+          true,
+        );
+        // Queried as bob, not erin: also proves display_name is visible cross-user.
+        await asUser(bob, async () => {
+          const { rows } = await db.query<{
+            user_id: string;
+            display_name: string;
+            total_points: number;
+          }>('select * from public.get_leaderboard(100)');
+          const row = rows.find((r) => r.user_id === erin);
+          assert.ok(row, 'erin should appear in the leaderboard');
+          assert.equal(row?.display_name, 'Erin Puan Testi');
+          // kept feeding (10) + observation (2) = 12; deleted and hidden feedings excluded.
+          assert.equal(row?.total_points, 12);
+        });
+      },
+    );
+    await t.test('get_leaderboard returns only user_id, display_name and total_points columns', () =>
+      asUser(alice, async () => {
+        const { rows } = await db.query<{
+          user_id: string;
+          display_name: string;
+          total_points: number;
+        }>('select * from public.get_leaderboard(5)');
+        assert.ok(rows.length > 0);
+        assert.deepEqual(Object.keys(rows[0]).sort(), ['display_name', 'total_points', 'user_id']);
+      }),
+    );
+    await t.test('get_leaderboard is rejected for anon', () =>
+      asUser(null, async () => {
+        await assert.rejects(db.query('select public.get_leaderboard(10)'), /permission denied/);
+      }),
+    );
+    await t.test('leaderboard_summary view cannot be selected directly by authenticated', () =>
+      asUser(alice, async () => {
+        await assert.rejects(
+          db.query('select * from public.leaderboard_summary'),
+          /permission denied/,
+        );
+      }),
+    );
+    await t.test('get_leaderboard clamps p_limit to [1,100]', async () => {
+      // 105 synthetic scorers, one point_transactions row each — enough to prove
+      // the upper clamp deterministically (total distinct scorers now exceeds 100).
+      await db.exec(`
+        insert into auth.users(id,raw_user_meta_data)
+        select ('f'||lpad(to_hex(g),7,'0')||'-1111-4111-8111-111111111111')::uuid,
+               jsonb_build_object('display_name','Puanlı Kullanıcı '||g)
+        from generate_series(1,105) g;
+        insert into public.point_transactions(user_id,source_type,source_id,points)
+        select ('f'||lpad(to_hex(g),7,'0')||'-1111-4111-8111-111111111111')::uuid,
+               'observation',gen_random_uuid(),1
+        from generate_series(1,105) g;
+      `);
+      await asUser(alice, async () => {
+        const over = await db.query('select public.get_leaderboard(1000)');
+        assert.equal(over.rows.length, 100);
+        const under = await db.query('select public.get_leaderboard(0)');
+        assert.equal(under.rows.length, 1);
+      });
+    });
+    await t.test('get_leaderboard orders ties by total_points desc, user_id asc', async () => {
+      const tieA = 'fc111111-1111-4111-8111-111111111111';
+      const tieB = 'fc222222-2222-4222-8222-222222222222';
+      await db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2),($3,$4)', [
+        tieA,
+        JSON.stringify({ display_name: 'Eşit Puan A' }),
+        tieB,
+        JSON.stringify({ display_name: 'Eşit Puan B' }),
+      ]);
+      await db.query(
+        `insert into public.point_transactions(user_id,source_type,source_id,points) values
+          ($1,'observation',gen_random_uuid(),500),($2,'observation',gen_random_uuid(),500)`,
+        [tieA, tieB],
+      );
+      await asUser(alice, async () => {
+        const { rows } = await db.query<{ user_id: string }>(
+          'select user_id from public.get_leaderboard(2)',
+        );
+        assert.equal(rows[0].user_id, tieA);
+        assert.equal(rows[1].user_id, tieB);
       });
     });
   } finally {
