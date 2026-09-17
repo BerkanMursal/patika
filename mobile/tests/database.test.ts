@@ -38,6 +38,12 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         'utf8',
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL('../../supabase/migrations/202609170001_location_verification.sql', import.meta.url),
+        'utf8',
+      ),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -67,6 +73,8 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
       note: 'Test',
       photo_path: `${alice}/${id}.jpg`,
       occurred_at: new Date(Date.now() - 60000).toISOString(),
+      reported_latitude: 41,
+      reported_longitude: 29,
     };
     await t.test('anonymous reads summaries but cannot write', () =>
       asUser(null, async () => {
@@ -154,6 +162,260 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         assert.equal(rows[0].last_grams, 250);
         assert.equal(rows[0].total_records, 2);
       }),
+    );
+    async function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+      const { rows } = await db.query<{ d: number }>(
+        'select public.location_distance_meters($1,$2,$3,$4) as d',
+        [lat1, lon1, lat2, lon2],
+      );
+      return rows[0].d;
+    }
+    // Dedicated park/point so these inserts never shift total_records counts
+    // asserted elsewhere against the shared `park`/`point` fixture.
+    const locPark = 'a1111111-1111-4111-8111-111111111111',
+      locPoint = 'a2222222-2222-4222-8222-222222222222';
+    await db.query(
+      'insert into public.parks(id,name,latitude,longitude) values($1,$2,41,29)',
+      [locPark, 'Konum Testi Parkı'],
+    );
+    await db.query(
+      'insert into public.feeding_points(id,park_id,latitude,longitude) values($1,$2,41,29)',
+      [locPoint, locPark],
+    );
+    await t.test(
+      'submit_feeding rejects missing/out-of-range/far location and accepts within 200m',
+      () =>
+        asUser(alice, async () => {
+          async function submitAt(
+            customId: string,
+            lat: number | string | null,
+            lon: number | string | null,
+          ) {
+            const photoPath = `${alice}/${customId}.jpg`;
+            await db.query(
+              "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+              [photoPath, alice],
+            );
+            return db.query('select public.submit_feeding($1::jsonb)', [
+              JSON.stringify({
+                ...payload,
+                id: customId,
+                point_id: locPoint,
+                park_id: locPark,
+                photo_path: photoPath,
+                reported_latitude: lat,
+                reported_longitude: lon,
+              }),
+            ]);
+          }
+          await assert.rejects(
+            submitAt('a0000000-0000-4000-8000-000000000001', null, null),
+            /Konum bilgisi gerekli/,
+          );
+          await assert.rejects(
+            submitAt('a0000000-0000-4000-8000-000000000002', 95, 29),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            submitAt('a0000000-0000-4000-8000-000000000003', 41, 200),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            submitAt('a0000000-0000-4000-8000-000000000008', -95, 29),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            submitAt('a0000000-0000-4000-8000-000000000009', 'NaN', 29),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            submitAt('a0000000-0000-4000-8000-000000000010', 'Infinity', 29),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            submitAt('a0000000-0000-4000-8000-000000000004', 41.01, 29),
+            /Konumunu kontrol edip tekrar dene/,
+          );
+          await submitAt('a0000000-0000-4000-8000-000000000005', 41, 29);
+          {
+            const { rows } = await db.query<{
+              reported_latitude: number;
+              reported_longitude: number;
+            }>(
+              'select reported_latitude, reported_longitude from public.feeding_events where id=$1',
+              ['a0000000-0000-4000-8000-000000000005'],
+            );
+            assert.equal(rows[0].reported_latitude, 41);
+            assert.equal(rows[0].reported_longitude, 29);
+          }
+          const under = 41 + 199 / 111320;
+          const over = 41 + 201 / 111320;
+          const dUnder = await distanceMeters(under, 29, 41, 29);
+          const dOver = await distanceMeters(over, 29, 41, 29);
+          assert.ok(dUnder > 150 && dUnder <= 200, `expected ~200m, got ${dUnder}`);
+          assert.ok(dOver > 200 && dOver < 250, `expected ~200m, got ${dOver}`);
+          await submitAt('a0000000-0000-4000-8000-000000000006', under, 29);
+          await assert.rejects(
+            submitAt('a0000000-0000-4000-8000-000000000007', over, 29),
+            /Konumunu kontrol edip tekrar dene/,
+          );
+        }),
+    );
+    await t.test(
+      'submit_observation rejects missing/out-of-range/far location and accepts within 200m',
+      async () => {
+        let observedId = '';
+        await asUser(alice, async () => {
+          await assert.rejects(
+            db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+              locPoint,
+              'full',
+              'full',
+              '',
+              null,
+              null,
+            ]),
+            /Konum bilgisi gerekli/,
+          );
+          await assert.rejects(
+            db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+              locPoint,
+              'full',
+              'full',
+              '',
+              41,
+              -200,
+            ]),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+              locPoint,
+              'full',
+              'full',
+              '',
+              -95,
+              29,
+            ]),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+              locPoint,
+              'full',
+              'full',
+              '',
+              'NaN',
+              29,
+            ]),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+              locPoint,
+              'full',
+              'full',
+              '',
+              'Infinity',
+              29,
+            ]),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+              locPoint,
+              'full',
+              'full',
+              '',
+              41.01,
+              29,
+            ]),
+            /Konumunu kontrol edip tekrar dene/,
+          );
+          {
+            const { rows } = await db.query<{ id: string }>(
+              'select public.submit_observation($1,$2,$3,$4,$5,$6) as id',
+              [locPoint, 'full', 'full', '', 41, 29],
+            );
+            observedId = rows[0].id;
+          }
+          const under = 41 + 199 / 111320;
+          const over = 41 + 201 / 111320;
+          const dUnder = await distanceMeters(under, 29, 41, 29);
+          const dOver = await distanceMeters(over, 29, 41, 29);
+          assert.ok(dUnder > 150 && dUnder <= 200, `expected ~200m, got ${dUnder}`);
+          assert.ok(dOver > 200 && dOver < 250, `expected ~200m, got ${dOver}`);
+          await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+            locPoint,
+            'full',
+            'full',
+            '',
+            under,
+            29,
+          ]);
+          await assert.rejects(
+            db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+              locPoint,
+              'full',
+              'full',
+              '',
+              over,
+              29,
+            ]),
+            /Konumunu kontrol edip tekrar dene/,
+          );
+        });
+        // observations has no client-facing SELECT grant (read-only via
+        // get_parks/park_summaries), so verify the persisted row at the
+        // ambient/superuser connection level, outside the authenticated role.
+        const observed = await db.query<{
+          reported_latitude: number;
+          reported_longitude: number;
+        }>(
+          'select reported_latitude, reported_longitude from public.observations where id=$1',
+          [observedId],
+        );
+        assert.equal(observed.rows[0].reported_latitude, 41);
+        assert.equal(observed.rows[0].reported_longitude, 29);
+      },
+    );
+    // feeding_points has no lat/lng CHECK constraint (unlike parks, which is
+    // bounded to Turkey), so points can be placed at the exact range edges to
+    // test the inclusive latitude/longitude boundary in isolation from the
+    // 200m distance check (each point is reported at its own exact location).
+    const boundaryPark = 'a3333333-3333-4333-8333-333333333333',
+      northPole = 'a4444444-4444-4444-8444-444444444444',
+      southPole = 'a5555555-5555-4555-8555-555555555555',
+      dateline = 'a6666666-6666-4666-8666-666666666666';
+    await db.query(
+      'insert into public.parks(id,name,latitude,longitude) values($1,$2,41,29)',
+      [boundaryPark, 'Sınır Testi Parkı'],
+    );
+    await db.query(
+      `insert into public.feeding_points(id,park_id,name,latitude,longitude) values
+        ($1,$4,'Kuzey Kutbu',90,0),($2,$4,'Güney Kutbu',-90,0),($3,$4,'Tarih Değiştirme Hattı',0,180)`,
+      [northPole, southPole, dateline, boundaryPark],
+    );
+    await t.test(
+      'exact range boundaries (latitude ±90, longitude ±180) are accepted',
+      () =>
+        asUser(alice, async () => {
+          async function observeAt(pointId: string, lat: number, lon: number) {
+            return db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+              pointId,
+              'full',
+              'full',
+              '',
+              lat,
+              lon,
+            ]);
+          }
+          await observeAt(northPole, 90, 0);
+          await observeAt(southPole, -90, 0);
+          await observeAt(dateline, 0, 180);
+          // -180 and 180 are the same meridian, so this is still 0m from `dateline`.
+          await observeAt(dateline, 0, -180);
+        }),
     );
     await t.test('private favorites are isolated between users', async () => {
       await asUser(alice, async () => {

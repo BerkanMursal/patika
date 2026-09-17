@@ -124,12 +124,22 @@ Gruplar arası sıra: **Grup 1 (Veteriner) → Grup 2 (Konum Doğrulama) → Gru
 - 200m içinde konum → kayıt normal işlenir
 - 200m dışında konum → RPC hata döner, hiçbir satır oluşmaz (`feeding_events`/`observations`'da kayıt yok)
 - `reported_latitude/longitude` gönderilmezse (eski client / geriye dönük uyumluluk) davranış netleştirilmeli ve test edilmeli (öneri: parametre zorunlu hale getirilip eksikse hata döndürülsün, sessiz geçiş olmasın)
+- Geçersiz aralıkta koordinat (`latitude` -90..90 dışında veya `longitude` -180..180 dışında) → RPC hata döner, kayıt oluşmaz
+- Tam sınırda mesafe: mesafe == 200m → kabul edilir; mesafe 200m'yi aşan en küçük fark (örn. 200.01m) → reddedilir (`<=200` kabul, `>200` ret sınır davranışı)
 - Mevcut geçerli senaryolar (T3 öncesi davranışla aynı sonucu veren durumlar) regresyon testiyle doğrulanır
 
 **Acceptance criteria:**
 - Var olan `submit_feeding`/`submit_observation` çağıran testler (varsa `mobile/tests/*.test.ts`, PGlite tabanlı) kırılmadan geçer
 - 200m eşiği için içeride/dışında senaryolar için yeni test eklenir ve geçer; dışındaki senaryoda kayıt oluşmadığı doğrulanır
+- Sınır davranışı net: mesafe **<= 200m kabul**, **> 200m ret** olarak test edilir
+- `latitude`/`longitude` değerleri sunucu tarafında geçerli aralıkta doğrulanır (`latitude`: -90..90, `longitude`: -180..180); aralık dışı değerler açık bir hata ile reddedilir ve test edilir
 - Mevcut RPC imzası geriye dönük olarak (parametre eklenmesi dışında) bozulmaz
+
+**⚠️ Deployment notu (kritik — code review'da bulundu):** `submit_feeding` ve `submit_observation` artık `reported_latitude`/`reported_longitude` alanlarını **zorunlu** kılıyor; eksikse RPC reddediyor. T3 backend-only olduğu için bu migration **T4 (mobil konum gönderimi) app store'da yeterince yayılmadan production'a tek başına deploy edilmemelidir.** Aksi halde:
+- Hâlâ eski uygulama sürümünü kullanan tüm kullanıcıların besleme/gözlem kayıtları RPC tarafından reddedilir (payload'larında bu alanlar hiç yok),
+- Cihazda bekleyen eski-format offline queue kayıtları da senkronize olamayıp sürekli reddedilir.
+
+Bu migration ile T4'ün mobil dağıtımı arasındaki sıralama, deploy planında ayrıca ele alınmalı (örn. T4 uygulaması store'da kabul edilebilir oranda yayıldıktan sonra bu migration'ı çalıştırmak). Bu bilinen bir MVP-rollout kısıtıdır; T3 kapsamında geçici bir uyumluluk modu veya feature flag **eklenmemiştir** — bilinçli bir tercihtir, runtime validasyonu gevşetilmemiştir.
 
 ---
 
