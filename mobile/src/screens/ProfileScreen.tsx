@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -7,7 +7,9 @@ import { useApp } from '../state/AppProvider';
 import { Button, Card, Field, Icon, Notice, textStyles as t } from '../ui/common';
 import { C } from '../ui/theme';
 import { requireBackend } from '../services/supabase';
+import { getMyPoints } from '../services/repository';
 import { parkDataSources } from '../core/data-sources';
+type PointsState = { status: 'loading' } | { status: 'success'; value: number } | { status: 'error' };
 export function ProfileScreen() {
   const app = useApp(),
     nav = useNavigation<NativeStackNavigationProp<RootStack>>(),
@@ -16,7 +18,23 @@ export function ProfileScreen() {
     [deleting, setDeleting] = useState(false),
     [confirmation, setConfirmation] = useState(''),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState('');
+    [error, setError] = useState(''),
+    [points, setPoints] = useState<PointsState>({ status: 'loading' });
+  useEffect(() => {
+    if (app.demo || !app.viewer) return;
+    let cancelled = false;
+    setPoints({ status: 'loading' });
+    getMyPoints()
+      .then((value) => {
+        if (!cancelled) setPoints({ status: 'success', value });
+      })
+      .catch(() => {
+        if (!cancelled) setPoints({ status: 'error' });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [app.demo, app.viewer?.id]);
   async function logout() {
     try {
       await app.logout();
@@ -86,6 +104,15 @@ export function ProfileScreen() {
               ? 'Örnek verilerle uygulamayı keşfet.'
               : 'Parkları görmek için hesap gerekmez.')}
         </Text>
+        {!app.demo && app.viewer ? (
+          <Text style={t.body}>
+            {points.status === 'loading'
+              ? '…'
+              : points.status === 'success'
+                ? `${points.value} puan`
+                : '—'}
+          </Text>
+        ) : null}
         {app.viewer ? (
           <Pressable
             onPress={() => {

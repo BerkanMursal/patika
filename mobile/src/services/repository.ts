@@ -100,6 +100,11 @@ export async function submitObservation(input: Observation) {
   });
   if (error) throw error;
 }
+export async function getMyPoints(): Promise<number> {
+  const { data, error } = await requireBackend().rpc('get_my_points');
+  if (error) throw error;
+  return data as number;
+}
 export async function loadFavorites(): Promise<string[]> {
   const { data, error } = await requireBackend().from('favorites').select('park_id');
   if (error) throw error;

@@ -44,6 +44,18 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         'utf8',
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL('../../supabase/migrations/202609170002_points.sql', import.meta.url),
+        'utf8',
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL('../../supabase/migrations/202609170003_my_points.sql', import.meta.url),
+        'utf8',
+      ),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -698,6 +710,192 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
           true,
         );
       },
+    );
+    await t.test('point_transactions: authenticated user cannot insert directly', () =>
+      asUser(alice, async () => {
+        await assert.rejects(
+          db.query(
+            "insert into public.point_transactions(user_id,source_type,source_id,points) values($1,'feeding',gen_random_uuid(),999)",
+            [alice],
+          ),
+          /permission denied/,
+        );
+      }),
+    );
+    function feedingPayload(id: string, userId: string, photoPath: string, lat: number, lon: number) {
+      return {
+        id,
+        user_id: userId,
+        point_id: locPoint,
+        park_id: locPark,
+        food_type: 'dry',
+        food_grams: 100,
+        water_ml: 0,
+        note: '',
+        photo_path: photoPath,
+        occurred_at: new Date().toISOString(),
+        reported_latitude: lat,
+        reported_longitude: lon,
+      };
+    }
+    await t.test(
+      'submit_feeding produces exactly one 10-point transaction; retry does not duplicate',
+      () =>
+        asUser(alice, async () => {
+          const id = 'd0000000-0000-4000-8000-000000000001';
+          const photoPath = `${alice}/${id}.jpg`;
+          await db.query(
+            "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+            [photoPath, alice],
+          );
+          const body = JSON.stringify(feedingPayload(id, alice, photoPath, 41, 29));
+          await db.query('select public.submit_feeding($1::jsonb)', [body]);
+          // Same id again: submit_feeding's own idempotency guard returns early,
+          // so this must not add a second point_transactions row.
+          await db.query('select public.submit_feeding($1::jsonb)', [body]);
+          const { rows } = await db.query<{
+            source_type: string;
+            points: number;
+            user_id: string;
+          }>('select source_type, points, user_id from public.point_transactions where source_id=$1', [
+            id,
+          ]);
+          assert.equal(rows.length, 1);
+          assert.equal(rows[0].source_type, 'feeding');
+          assert.equal(rows[0].points, 10);
+          assert.equal(rows[0].user_id, alice);
+        }),
+    );
+    await t.test('submit_observation produces exactly one 2-point transaction', () =>
+      asUser(alice, async () => {
+        const { rows: submitted } = await db.query<{ id: string }>(
+          'select public.submit_observation($1,$2,$3,$4,$5,$6) as id',
+          [locPoint, 'full', 'full', '', 41, 29],
+        );
+        const { rows } = await db.query<{ source_type: string; points: number }>(
+          'select source_type, points from public.point_transactions where source_id=$1',
+          [submitted[0].id],
+        );
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].source_type, 'observation');
+        assert.equal(rows[0].points, 2);
+      }),
+    );
+    await t.test('rejected feeding and observation produce no point_transactions', () =>
+      asUser(alice, async () => {
+        const countFor = async (userId: string) =>
+          (
+            await db.query<{ c: number }>(
+              'select count(*)::int as c from public.point_transactions where user_id=$1',
+              [userId],
+            )
+          ).rows[0].c;
+        const before = await countFor(alice);
+        const id = 'd0000000-0000-4000-8000-000000000002';
+        const photoPath = `${alice}/${id}.jpg`;
+        await db.query(
+          "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+          [photoPath, alice],
+        );
+        // ~1.1km from locPoint (41,29) — rejected by T3's 200m check.
+        await assert.rejects(
+          db.query('select public.submit_feeding($1::jsonb)', [
+            JSON.stringify(feedingPayload(id, alice, photoPath, 41.01, 29)),
+          ]),
+        );
+        await assert.rejects(
+          db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+            locPoint,
+            'full',
+            'full',
+            '',
+            41.01,
+            29,
+          ]),
+        );
+        assert.equal(await countFor(alice), before);
+      }),
+    );
+    // A dedicated third user: `bob` is relied on elsewhere (e.g. "blocked
+    // users disappear from the public activity API") to have never
+    // published a feeding, so earning points here must not touch bob.
+    const carol = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    await db.query("insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"Carol\"}')", [
+      carol,
+    ]);
+    await t.test('SUM(points) aggregates correctly for a user', () =>
+      asUser(carol, async () => {
+        const id = 'd0000000-0000-4000-8000-000000000003';
+        const photoPath = `${carol}/${id}.jpg`;
+        await db.query(
+          "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+          [photoPath, carol],
+        );
+        await db.query('select public.submit_feeding($1::jsonb)', [
+          JSON.stringify(feedingPayload(id, carol, photoPath, 41, 29)),
+        ]);
+        await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+          locPoint,
+          'full',
+          'full',
+          '',
+          41,
+          29,
+        ]);
+        const { rows } = await db.query<{ total: number }>(
+          'select coalesce(sum(points),0)::int as total from public.point_transactions where user_id=$1',
+          [carol],
+        );
+        // carol has no other point_transactions in this suite: 10 (feeding) + 2 (observation).
+        assert.equal(rows[0].total, 12);
+      }),
+    );
+    await t.test('point_transactions RLS: users see only their own rows', async () => {
+      await asUser(alice, async () => {
+        const { rows } = await db.query<{ user_id: string }>(
+          'select user_id from public.point_transactions',
+        );
+        assert.ok(rows.length > 0);
+        assert.ok(rows.every((r) => r.user_id === alice));
+      });
+      await asUser(carol, async () => {
+        const { rows } = await db.query<{ user_id: string }>(
+          'select user_id from public.point_transactions',
+        );
+        assert.ok(rows.length > 0);
+        assert.ok(rows.every((r) => r.user_id === carol));
+      });
+      await asUser(null, async () => {
+        await assert.rejects(
+          db.query('select * from public.point_transactions'),
+          /permission denied/,
+        );
+      });
+    });
+    await t.test('get_my_points returns the caller\'s own total', () =>
+      asUser(carol, async () => {
+        // carol earned exactly 10 (feeding) + 2 (observation) points earlier in this suite.
+        const { rows } = await db.query<{ total: number }>(
+          'select public.get_my_points() as total',
+        );
+        assert.equal(rows[0].total, 12);
+      }),
+    );
+    await t.test('get_my_points returns 0 for a user with no transactions', () =>
+      asUser(bob, async () => {
+        const { rows } = await db.query<{ total: number }>(
+          'select public.get_my_points() as total',
+        );
+        assert.equal(rows[0].total, 0);
+      }),
+    );
+    await t.test('get_my_points is rejected for anon', () =>
+      asUser(null, async () => {
+        await assert.rejects(
+          db.query('select public.get_my_points()'),
+          /permission denied/,
+        );
+      }),
     );
   } finally {
     await db.close();
