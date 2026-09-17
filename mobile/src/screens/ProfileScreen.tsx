@@ -81,6 +81,12 @@ export function ProfileScreen() {
       icon: 'cloud-upload-outline',
       route: 'Outbox',
     },
+    {
+      title: 'Sıralama',
+      detail: 'En çok yardım yapanlar',
+      icon: 'trophy-outline',
+      route: 'Leaderboard',
+    },
     { title: 'Patika hakkında', detail: 'Bir kap, bir umut', icon: 'leaf-outline', route: 'About' },
     {
       title: 'Gizlilik ve topluluk',

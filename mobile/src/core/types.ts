@@ -108,3 +108,4 @@ export type NameSuggestion = {
   latitude?: number;
   longitude?: number;
 };
+export type LeaderboardRow = { user_id: string; display_name: string; total_points: number };

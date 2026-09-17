@@ -1,6 +1,7 @@
 import type {
   Feeding,
   FeedingDraft,
+  LeaderboardRow,
   Observation,
   Park,
   Point,
@@ -104,6 +105,11 @@ export async function getMyPoints(): Promise<number> {
   const { data, error } = await requireBackend().rpc('get_my_points');
   if (error) throw error;
   return data as number;
+}
+export async function getLeaderboard(limit = 50): Promise<LeaderboardRow[]> {
+  const { data, error } = await requireBackend().rpc('get_leaderboard', { p_limit: limit });
+  if (error) throw error;
+  return (data ?? []) as LeaderboardRow[];
 }
 export async function loadFavorites(): Promise<string[]> {
   const { data, error } = await requireBackend().from('favorites').select('park_id');
