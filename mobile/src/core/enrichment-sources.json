@@ -1,0 +1,45 @@
+{
+  "fetchedAt": "2026-09-13T20:57:00.096Z",
+  "sources": [
+    {
+      "file": "districts.geojson",
+      "url": "https://github.com/wmgeolab/geoBoundaries/raw/9469f09/releaseData/gbOpen/TUR/ADM2/geoBoundaries-TUR-ADM2_simplified.geojson",
+      "attribution": "OpenStreetMap contributors via geoBoundaries, TUR-ADM2-54988432 (2021)",
+      "license": "ODbL 1.0",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "sha256": "17af9a6bff9bed53390e49cbbf66569e0d296f134cd4528e1dc3c0d204e358f3"
+    },
+    {
+      "file": "kadikoy-points.json",
+      "url": "https://acikveri.kadikoy.bel.tr/dataset/bf4e37df-92ae-4114-a358-3de3b165b3e1/resource/8c037ae0-7f0a-43f0-8714-2ce926dde04c/download/parklar_point.json",
+      "attribution": "Kadıköy Belediyesi, Park ve Bahçeler Müdürlüğü",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sha256": "902486cab6ee575f7f95d7f6d75b81c32cc66202c5931892fe48decc097a4ce7"
+    },
+    {
+      "file": "kadikoy-polygons.json",
+      "url": "https://acikveri.kadikoy.bel.tr/dataset/bf4e37df-92ae-4114-a358-3de3b165b3e1/resource/71b46fb9-221d-483b-b58e-3d98b209cfef/download/parklar.json",
+      "attribution": "Kadıköy Belediyesi, Park ve Bahçeler Müdürlüğü",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "sha256": "4b805fe91fbd3a1a2dab7d21aa2a8bebe595d6f10a33fda816b49285297f1f50"
+    },
+    {
+      "file": "izmir-south.csv",
+      "url": "https://acikveri.bizizmir.com/dataset/72a1e584-ac48-41b1-b993-12c6f1cd1a63/resource/ab95e4b0-8db3-40b3-8de8-494d57a3135e/download/guneyparklarr.csv",
+      "attribution": "İzmir Büyükşehir Belediyesi",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://acikveri.bizizmir.com/tr/license",
+      "sha256": "e72d2bb22a4b4e17182595280aed7f593e8d5aff57c78478575c5095afc0d43a"
+    },
+    {
+      "file": "izmir-north.csv",
+      "url": "https://acikveri.bizizmir.com/dataset/72a1e584-ac48-41b1-b993-12c6f1cd1a63/resource/ce856a4d-b898-4876-afe5-ecfaba74bdcf/download/kuzeyparklar.csv",
+      "attribution": "İzmir Büyükşehir Belediyesi",
+      "license": "CC BY 4.0",
+      "licenseUrl": "https://acikveri.bizizmir.com/tr/license",
+      "sha256": "b604905504299c50ecfee6989d31ca66046d1a5707c5201ea6222ea42a700ff9"
+    }
+  ]
+}

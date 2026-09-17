@@ -1,0 +1,229 @@
+html,
+body,
+#map {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  background: #f3f2e9;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+* {
+  box-sizing: border-box;
+}
+.maplibregl-ctrl-top-right {
+  top: 78px;
+  right: 14px;
+}
+.maplibregl-ctrl-top-right .maplibregl-ctrl {
+  margin: 0;
+}
+.maplibregl-ctrl-group {
+  border-radius: 15px;
+  overflow: hidden;
+  box-shadow: 0 4px 18px #204c3e16 !important;
+  border: 1px solid #e1e7dc;
+}
+.maplibregl-ctrl-group button {
+  width: 42px;
+  height: 44px;
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid #edf0e9;
+}
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  opacity: 0.65;
+}
+.maplibregl-ctrl-bottom-right .maplibregl-ctrl {
+  margin: 0 8px 6px 0;
+}
+.maplibregl-ctrl-attrib {
+  font-size: 10px;
+  background: #ffffffe8;
+}
+.maplibregl-ctrl-attrib a {
+  color: #56685e;
+}
+.park-pin {
+  border: 0;
+  background: none;
+  width: 46px;
+  height: 51px;
+  padding: 3px 4px 7px;
+  cursor: pointer;
+  filter: drop-shadow(0 3px 5px #204c3e25);
+  z-index: 2;
+}
+.pin-shape {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 3px solid white;
+  border-radius: 50%;
+  background: var(--pin-color);
+  transition:
+    scale 0.18s,
+    box-shadow 0.18s;
+}
+.pin-shape svg {
+  width: 21px;
+  height: 21px;
+  fill: white;
+}
+.pin-tip {
+  position: absolute;
+  left: 18px;
+  bottom: 3px;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 8px solid white;
+}
+.park-pin:hover .pin-shape,
+.park-pin:focus-visible .pin-shape {
+  scale: 1.12;
+}
+.park-pin:focus-visible,
+.park-cluster:focus-visible {
+  outline: 3px solid #214f3e;
+  outline-offset: 3px;
+}
+.park-pin.is-selected {
+  z-index: 5;
+}
+.park-pin.is-selected .pin-shape {
+  background: #245e48;
+  box-shadow: 0 0 0 6px #2c69532b;
+  scale: 1.15;
+}
+.park-cluster {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 49px;
+  height: 49px;
+  padding: 0;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #edf3dc;
+  color: #315b45;
+  box-shadow:
+    0 0 0 5px #b7ceaa44,
+    0 4px 10px #204c3e20;
+  cursor: pointer;
+  z-index: 1;
+}
+.park-cluster strong {
+  font:
+    750 16px/18px system-ui,
+    sans-serif;
+}
+.park-cluster span {
+  font:
+    500 9px/12px system-ui,
+    sans-serif;
+  letter-spacing: 0.3px;
+}
+.park-cluster:hover {
+  background: #dcebc8;
+}
+.user-location {
+  height: 17px;
+  width: 17px;
+  border-radius: 50%;
+  border: 3px solid white;
+  background: #558bad;
+  box-shadow: 0 0 0 9px #558bad24;
+  pointer-events: none;
+}
+.park-area-control {
+  position: absolute;
+  z-index: 3;
+  top: 123px;
+  left: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  pointer-events: none;
+}
+.park-area-toggle {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #ceddcb;
+  border-radius: 12px;
+  background: #ffffffed;
+  color: #315b45;
+  font: 600 12px system-ui;
+  cursor: pointer;
+  box-shadow: 0 3px 12px #204c3e12;
+}
+.park-area-swatch {
+  width: 17px;
+  height: 14px;
+  border: 2px solid #4b8862;
+  border-radius: 4px 2px 5px 2px;
+  background: #3a896026;
+  transform: rotate(-10deg);
+}
+.park-area-toggle[aria-pressed='false'] .park-area-swatch {
+  border-color: #8b978d;
+  background: transparent;
+}
+.park-area-toggle:focus-visible,
+.park-area-retry:focus-visible {
+  outline: 3px solid #214f3e;
+  outline-offset: 2px;
+}
+.park-area-note {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #fffffff0;
+  color: #526857;
+  font: 10px/14px system-ui;
+}
+.park-area-note:empty {
+  display: none;
+}
+.park-area-retry {
+  pointer-events: auto;
+  min-height: 36px;
+  border: 1px solid #ceddcb;
+  background: #fff;
+  border-radius: 8px;
+  padding: 6px 10px;
+  color: #315b45;
+  font: 600 11px system-ui;
+  cursor: pointer;
+}
+.map-loading {
+  position: absolute;
+  z-index: 10;
+  left: 15px;
+  right: 70px;
+  top: 118px;
+  width: fit-content;
+  max-width: 320px;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: #fffffff2;
+  color: #49634f;
+  font: 12px/18px system-ui;
+  box-shadow: 0 4px 16px #204c3e14;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin-shape {
+    transition: none;
+  }
+}

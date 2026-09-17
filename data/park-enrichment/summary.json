@@ -1,0 +1,10 @@
+{
+  "total": 24669,
+  "namedBefore": 7851,
+  "namesAdded": 10,
+  "districtsAdded": 23888,
+  "addressLabels": 853,
+  "municipalAddresses": 62,
+  "namedAfter": 7861,
+  "method": "Unique polygon containment or reciprocal unique point within 25 m; existing names preserved. İzmir address: unique exact normalized name and district. Districts: unique polygon containment, 2021 boundary snapshot."
+}

@@ -1,0 +1,7 @@
+android/
+ios/
+.expo/
+tests/
+*.apk
+*.aab
+dist-native/

@@ -1,0 +1,2 @@
+-- Intentionally empty: demo feeding records must never appear in the shared database.
+-- Import licensed park data with scripts/import-parks.mjs after migration.

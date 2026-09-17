@@ -1,0 +1,24 @@
+{
+  "framework": null,
+  "buildCommand": "npm run export:web",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/((?!assets/|_expo/|data/|favicon.ico).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/data/park-boundaries/(.*)",
+      "headers": [
+        { "key": "Access-Control-Allow-Origin", "value": "*" },
+        { "key": "Cache-Control", "value": "public, max-age=3600" }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,443 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+import { unaccent } from '@electric-sql/pglite/contrib/unaccent';
+
+test('PostgreSQL access control, ownership, idempotency and chronology', async (t) => {
+  const db = new PGlite({ extensions: { unaccent } });
+  try {
+    await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;
+      create schema auth;create schema storage;create schema extensions;
+      create table auth.users(id uuid primary key,raw_user_meta_data jsonb default '{}');
+      create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+      create function auth.jwt() returns jsonb language sql stable as $$select coalesce(nullif(current_setting('request.jwt.claims',true),''),'{}')::jsonb$$;
+      create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+      create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text unique,owner_id text);
+      create function storage.foldername(text) returns text[] language sql immutable as $$select string_to_array($1,'/')$$;
+      alter table storage.objects enable row level security;
+      grant usage on schema public,auth,storage,extensions to anon,authenticated,service_role;
+      grant select,insert,delete on storage.objects to authenticated;`);
+    let migration = await readFile(
+      new URL('../../supabase/migrations/202609130001_patika.sql', import.meta.url),
+      'utf8',
+    );
+    // PGlite does not ship PostGIS. Only the unused spatial column/index is
+    // omitted here; all production RLS policies, RPCs and constraints run as-is.
+    migration = migration
+      .replace('create extension if not exists postgis with schema extensions;', '')
+      .replace(
+        /  location extensions\.geography\(Point,4326\) generated always as[\s\S]*? stored,\n/,
+        '',
+      )
+      .replace('create index parks_location on public.parks using gist(location);', '');
+    await db.exec(migration);
+    await db.exec(
+      await readFile(
+        new URL('../../supabase/migrations/202609130002_park_names.sql', import.meta.url),
+        'utf8',
+      ),
+    );
+    const alice = '11111111-1111-4111-8111-111111111111',
+      bob = '22222222-2222-4222-8222-222222222222',
+      park = '33333333-3333-4333-8333-333333333333',
+      point = '44444444-4444-4444-8444-444444444444',
+      id = '55555555-5555-4555-8555-555555555555';
+    await db.exec(
+      `insert into auth.users values('${alice}','{"display_name":"Arda"}'),('${bob}','{"display_name":"Seyfi"}');insert into public.parks(id,name,latitude,longitude) values('${park}','Test Park',41,29);insert into public.feeding_points(id,park_id,latitude,longitude) values('${point}','${park}',41,29);`,
+    );
+    async function asUser(uid: string | null, fn: () => Promise<void>, moderator = false) {
+      await db.exec(
+        `set role ${uid ? 'authenticated' : 'anon'};select set_config('request.jwt.claim.sub','${uid ?? ''}',false);select set_config('request.jwt.claims','${moderator ? '{"app_metadata":{"role":"moderator"}}' : '{}'}',false);`,
+      );
+      try {
+        await fn();
+      } finally {
+        await db.exec('reset role');
+      }
+    }
+    const payload = {
+      id,
+      user_id: alice,
+      point_id: point,
+      park_id: park,
+      food_type: 'dry',
+      food_grams: 250,
+      water_ml: 0,
+      note: 'Test',
+      photo_path: `${alice}/${id}.jpg`,
+      occurred_at: new Date(Date.now() - 60000).toISOString(),
+    };
+    await t.test('anonymous reads summaries but cannot write', () =>
+      asUser(null, async () => {
+        const { rows } = await db.query<{ last_fed_at: string | null }>(
+          'select * from public.get_park($1)',
+          [park],
+        );
+        assert.equal(rows[0].last_fed_at, null);
+        await assert.rejects(
+          db.query('select public.submit_feeding($1::jsonb)', [JSON.stringify(payload)]),
+          /permission denied/,
+        );
+      }),
+    );
+    await t.test('cannot write directly, spoof owner or upload to another owner folder', () =>
+      asUser(bob, async () => {
+        await assert.rejects(
+          db.exec('insert into public.feeding_events(id) values(gen_random_uuid())'),
+          /permission denied/,
+        );
+        await assert.rejects(
+          db.query('select public.submit_feeding($1::jsonb)', [JSON.stringify(payload)]),
+          /Oturum gerekli/,
+        );
+        await assert.rejects(
+          db.query(
+            "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+            [payload.photo_path, bob],
+          ),
+          /row-level security/,
+        );
+      }),
+    );
+    await t.test('requires an uploaded photo; repeat delivery creates one record', () =>
+      asUser(alice, async () => {
+        await assert.rejects(
+          db.query('select public.submit_feeding($1::jsonb)', [JSON.stringify(payload)]),
+          /fotoğrafını yükleyin/,
+        );
+        await db.query(
+          "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+          [payload.photo_path, alice],
+        );
+        for (let i = 0; i < 2; i++)
+          await db.query('select public.submit_feeding($1::jsonb)', [JSON.stringify(payload)]);
+        const { rows } = await db.query<{ total_records: number }>(
+          'select * from public.get_park($1)',
+          [park],
+        );
+        assert.equal(rows[0].total_records, 1);
+      }),
+    );
+    await t.test('cannot remove another user record or escalate moderation', () =>
+      asUser(bob, async () => {
+        await assert.rejects(db.query('select public.remove_feeding($1)', [id]), /yetkiniz yok/);
+        await assert.rejects(
+          db.query('select public.resolve_report($1,true)', [id]),
+          /Moderatör yetkisi/,
+        );
+        await assert.rejects(
+          db.query('insert into public.favorites values($1,$2,now())', [alice, park]),
+          /row-level security/,
+        );
+      }),
+    );
+    await t.test('old offline event cannot replace recent last-feeding timestamp', () =>
+      asUser(alice, async () => {
+        const oldId = '66666666-6666-4666-8666-666666666666';
+        const old = {
+          ...payload,
+          id: oldId,
+          photo_path: `${alice}/${oldId}.jpg`,
+          food_grams: 900,
+          occurred_at: new Date(Date.now() - 14 * 86400000).toISOString(),
+        };
+        await db.query(
+          "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+          [old.photo_path, alice],
+        );
+        await db.query('select public.submit_feeding($1::jsonb)', [JSON.stringify(old)]);
+        const { rows } = await db.query<{ last_grams: number; total_records: number }>(
+          'select * from public.get_park($1)',
+          [park],
+        );
+        assert.equal(rows[0].last_grams, 250);
+        assert.equal(rows[0].total_records, 2);
+      }),
+    );
+    await t.test('private favorites are isolated between users', async () => {
+      await asUser(alice, async () => {
+        await db.query('insert into public.favorites values($1,$2,now())', [alice, park]);
+      });
+      await asUser(bob, async () => {
+        assert.equal((await db.query('select * from public.favorites')).rows.length, 0);
+      });
+    });
+    await t.test('blocked users disappear from the public activity API', () =>
+      asUser(bob, async () => {
+        await db.query('select public.block_user($1)', [alice]);
+        assert.equal((await db.query('select * from public.list_feedings()')).rows.length, 0);
+      }),
+    );
+    await t.test('owner removal hides the record from other readers', async () => {
+      await asUser(alice, async () => {
+        await db.query('select public.remove_feeding($1)', [id]);
+      });
+      await asUser(null, async () => {
+        const { rows } = await db.query<{ total_records: number }>(
+          'select * from public.get_park($1)',
+          [park],
+        );
+        assert.equal(rows[0].total_records, 1);
+      });
+    });
+    await t.test('missing owner is rejected even with a valid session', () =>
+      asUser(alice, async () => {
+        await assert.rejects(
+          db.query('select public.submit_feeding($1::jsonb)', [
+            JSON.stringify({ ...payload, user_id: null }),
+          ]),
+          /Oturum gerekli/,
+        );
+      }),
+    );
+    await t.test('equal timestamps paginate without skipping records', async () => {
+      const secondPark = '77777777-7777-4777-8777-777777777777';
+      await db.query('insert into public.parks(id,name,latitude,longitude) values($1,$2,40,30)', [
+        secondPark,
+        'Sayfalama parkı',
+      ]);
+      await db.query(
+        'insert into public.feeding_points(id,park_id,latitude,longitude) values($1,$1,40,30)',
+        [secondPark],
+      );
+      await db.query(
+        `insert into public.feeding_events(id,user_id,point_id,park_id,food_type,food_grams,water_ml,photo_path,occurred_at) select ('88888888-8888-4888-8888-'||lpad(n::text,12,'0'))::uuid,$1,$2,$2,'dry',100,0,'pagination/'||n,$3 from generate_series(1,31) as n`,
+        [alice, secondPark, payload.occurred_at],
+      );
+      await asUser(null, async () => {
+        const first = await db.query<{ id: string; occurred_at: string }>(
+          'select * from public.list_feedings($1)',
+          [secondPark],
+        );
+        assert.equal(first.rows.length, 30);
+        const last = first.rows[29];
+        const second = await db.query<{ id: string }>(
+          'select * from public.list_feedings($1,false,$2,$3)',
+          [secondPark, last.occurred_at, last.id],
+        );
+        assert.equal(second.rows.length, 1);
+        assert.ok(!first.rows.some((e) => e.id === second.rows[0].id));
+      });
+    });
+    await t.test(
+      'park name suggestions enforce identity, private reads and moderation',
+      async () => {
+        const namePark = '99999999-9999-4999-8999-999999999999';
+        await db.query(
+          "insert into public.parks(id,name,name_status,latitude,longitude) values($1,'İsimsiz park','missing',41,29)",
+          [namePark],
+        );
+        await asUser(null, async () => {
+          await assert.rejects(
+            db.query('select public.suggest_park_name($1,$2,$3)', [
+              namePark,
+              'Pınar Parkı',
+              'Giriş tabelasındaki ad.',
+            ]),
+            /permission denied/,
+          );
+        });
+        let proposal = '';
+        await asUser(alice, async () => {
+          for (const bad of ['ab', 'Park', '<script>Park</script>', 'https://park.example'])
+            await assert.rejects(
+              db.query('select public.suggest_park_name($1,$2,$3)', [
+                namePark,
+                bad,
+                'Giriş tabelasındaki ad.',
+              ]),
+              /Geçerli/,
+            );
+          await assert.rejects(
+            db.query('select public.suggest_park_name($1,$2,$3)', [
+              namePark,
+              'Pınar Parkı',
+              'kısa',
+            ]),
+            /10–600/,
+          );
+          const submit = () =>
+            db.query<{ id: string }>('select public.suggest_park_name($1,$2,$3) as id', [
+              namePark,
+              'Pınar Parkı',
+              'Giriş tabelasındaki ad.',
+            ]);
+          proposal = (await submit()).rows[0].id;
+          assert.equal((await submit()).rows[0].id, proposal);
+          await assert.rejects(
+            db.query('select public.suggest_park_name($1,$2,$3)', [
+              namePark,
+              'Başka Park',
+              'Başka bir tabeladaki ad.',
+            ]),
+            /zaten/,
+          );
+          assert.equal(
+            (await db.query('select * from public.list_park_name_suggestions($1)', [namePark])).rows
+              .length,
+            1,
+          );
+          await assert.rejects(
+            db.query("update public.park_name_suggestions set status='approved' where id=$1", [
+              proposal,
+            ]),
+            /permission denied/,
+          );
+          assert.equal(
+            (await db.query<{ name: string }>('select * from public.get_park($1)', [namePark]))
+              .rows[0].name,
+            'İsimsiz park',
+          );
+        });
+        await asUser(bob, async () => {
+          assert.equal(
+            (await db.query('select * from public.park_name_suggestions')).rows.length,
+            0,
+          );
+          assert.equal(
+            (await db.query('select * from public.list_park_name_suggestions($1)', [namePark])).rows
+              .length,
+            0,
+          );
+          await db.exec(
+            `select set_config('request.jwt.claims','{"user_metadata":{"role":"moderator"}}',false)`,
+          );
+          await assert.rejects(
+            db.query('select public.review_park_name($1,true,$2)', [
+              proposal,
+              'Belediye kaydı kontrol edildi.',
+            ]),
+            /Moderatör/,
+          );
+        });
+        await asUser(
+          alice,
+          async () => {
+            await assert.rejects(
+              db.query('select public.review_park_name($1,true,$2)', [
+                proposal,
+                'Belediye kaydı kontrol edildi.',
+              ]),
+              /Kendi/,
+            );
+          },
+          true,
+        );
+        await asUser(
+          bob,
+          async () => {
+            await assert.rejects(
+              db.query('select public.review_park_name($1,true,$2)', [proposal, 'kısa']),
+              /inceleme notu/,
+            );
+            await db.query('select public.review_park_name($1,true,$2)', [
+              proposal,
+              'Belediye kaydı ve tabela kontrol edildi.',
+            ]);
+            await assert.rejects(
+              db.query('select public.review_park_name($1,true,$2)', [
+                proposal,
+                'Yeniden kontrol edildi.',
+              ]),
+              /zaten incelenmiş/,
+            );
+          },
+          true,
+        );
+        await asUser(null, async () => {
+          const p = (
+            await db.query<{ name: string; name_status: string }>(
+              'select * from public.get_park($1)',
+              [namePark],
+            )
+          ).rows[0];
+          assert.equal(p.name, 'Pınar Parkı');
+          assert.equal(p.name_status, 'community');
+          assert.equal(
+            (await db.query('select * from public.get_parks(40,42,28,30,$1)', ['Pınar Parkı'])).rows
+              .length,
+            1,
+          );
+        });
+        // Re-importing OSM data preserves the accepted name and its attribution.
+        await db.query(
+          "update public.parks set name='İsimsiz park',name_status='missing',name_source='OpenStreetMap' where id=$1",
+          [namePark],
+        );
+        assert.equal(
+          (
+            await db.query<{ name: string }>('select name from public.parks where id=$1', [
+              namePark,
+            ])
+          ).rows[0].name,
+          'Pınar Parkı',
+        );
+        await asUser(alice, async () => {
+          const row = (
+            await db.query<{ status: string; review_note: string }>(
+              'select * from public.list_park_name_suggestions($1)',
+              [namePark],
+            )
+          ).rows[0];
+          assert.equal(row.status, 'approved');
+          assert.match(row.review_note, /Belediye/);
+        });
+        let rejected = '';
+        await asUser(alice, async () => {
+          rejected = (
+            await db.query<{ id: string }>('select public.suggest_park_name($1,$2,$3) as id', [
+              namePark,
+              'Yanlış Park',
+              'Farklı kaynakta görülen ad.',
+            ])
+          ).rows[0].id;
+        });
+        await asUser(
+          bob,
+          async () => {
+            await db.query('select public.review_park_name($1,false,$2)', [
+              rejected,
+              'Kaynak farklı bir parka ait.',
+            ]);
+          },
+          true,
+        );
+        assert.equal(
+          (
+            await db.query<{ name: string }>('select name from public.parks where id=$1', [
+              namePark,
+            ])
+          ).rows[0].name,
+          'Pınar Parkı',
+        );
+        let stale = '';
+        await asUser(alice, async () => {
+          stale = (
+            await db.query<{ id: string }>('select public.suggest_park_name($1,$2,$3) as id', [
+              namePark,
+              'Eski Öneri Parkı',
+              'Eski kayıttan gelen bir öneri.',
+            ])
+          ).rows[0].id;
+        });
+        await db.query("update public.parks set name='Güncel Park' where id=$1", [namePark]);
+        await asUser(
+          bob,
+          async () => {
+            await assert.rejects(
+              db.query('select public.review_park_name($1,true,$2)', [
+                stale,
+                'Eski kaynağı kontrol ettim.',
+              ]),
+              /Park adı değişti/,
+            );
+          },
+          true,
+        );
+      },
+    );
+  } finally {
+    await db.close();
+  }
+});

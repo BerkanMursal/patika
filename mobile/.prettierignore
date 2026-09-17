@@ -1,0 +1,13 @@
+node_modules/
+android/
+ios/
+.expo/
+.vercel/
+dist/
+src/core/parks.json
+src/core/park-details.json
+src/core/boundary-manifest.json
+public/data/park-boundaries/
+src/components/map-bundle.ts
+package-lock.json
+dist-native/
