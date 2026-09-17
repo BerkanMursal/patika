@@ -56,6 +56,12 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         'utf8',
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL('../../supabase/migrations/202609170004_points_integrity.sql', import.meta.url),
+        'utf8',
+      ),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -185,14 +191,21 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
     // Dedicated park/point so these inserts never shift total_records counts
     // asserted elsewhere against the shared `park`/`point` fixture.
     const locPark = 'a1111111-1111-4111-8111-111111111111',
-      locPoint = 'a2222222-2222-4222-8222-222222222222';
+      locPoint = 'a2222222-2222-4222-8222-222222222222',
+      // Same coordinates as locPoint, distinct ids: let tests exercise more
+      // than one successful submit_observation at (41,29) without tripping
+      // the per-(user,point) cooldown that now applies to locPoint itself.
+      locPoint2 = 'a2222222-2222-4222-8222-222222222223',
+      locPoint3 = 'a2222222-2222-4222-8222-222222222225';
     await db.query(
       'insert into public.parks(id,name,latitude,longitude) values($1,$2,41,29)',
       [locPark, 'Konum Testi Parkı'],
     );
     await db.query(
-      'insert into public.feeding_points(id,park_id,latitude,longitude) values($1,$2,41,29)',
-      [locPoint, locPark],
+      `insert into public.feeding_points(id,park_id,name,latitude,longitude) values
+        ($1,$4,'Konum Testi Noktası',41,29),($2,$4,'Konum Testi Noktası 2',41,29),
+        ($3,$4,'Konum Testi Noktası 3',41,29)`,
+      [locPoint, locPoint2, locPoint3, locPark],
     );
     await t.test(
       'submit_feeding rejects missing/out-of-range/far location and accepts within 200m',
@@ -357,17 +370,21 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
           const dOver = await distanceMeters(over, 29, 41, 29);
           assert.ok(dUnder > 150 && dUnder <= 200, `expected ~200m, got ${dUnder}`);
           assert.ok(dOver > 200 && dOver < 250, `expected ~200m, got ${dOver}`);
+          // locPoint2 (not locPoint): locPoint already has a fresh observation
+          // above and would otherwise trip its own cooldown here.
           await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
-            locPoint,
+            locPoint2,
             'full',
             'full',
             '',
             under,
             29,
           ]);
+          // locPoint3: a third point, so this distance-rejection check isn't
+          // shadowed by locPoint2's cooldown from the call just above.
           await assert.rejects(
             db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
-              locPoint,
+              locPoint3,
               'full',
               'full',
               '',
@@ -398,15 +415,20 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
     const boundaryPark = 'a3333333-3333-4333-8333-333333333333',
       northPole = 'a4444444-4444-4444-8444-444444444444',
       southPole = 'a5555555-5555-4555-8555-555555555555',
-      dateline = 'a6666666-6666-4666-8666-666666666666';
+      dateline = 'a6666666-6666-4666-8666-666666666666',
+      // Same coordinates as `dateline`, distinct id — the +180/-180 pair below
+      // are two successful observations for the same user; using two point
+      // ids (instead of one) avoids the per-(user,point) cooldown between them.
+      dateline2 = 'a6666666-6666-4666-8666-666666666667';
     await db.query(
       'insert into public.parks(id,name,latitude,longitude) values($1,$2,41,29)',
       [boundaryPark, 'Sınır Testi Parkı'],
     );
     await db.query(
       `insert into public.feeding_points(id,park_id,name,latitude,longitude) values
-        ($1,$4,'Kuzey Kutbu',90,0),($2,$4,'Güney Kutbu',-90,0),($3,$4,'Tarih Değiştirme Hattı',0,180)`,
-      [northPole, southPole, dateline, boundaryPark],
+        ($1,$5,'Kuzey Kutbu',90,0),($2,$5,'Güney Kutbu',-90,0),
+        ($3,$5,'Tarih Değiştirme Hattı',0,180),($4,$5,'Tarih Değiştirme Hattı 2',0,180)`,
+      [northPole, southPole, dateline, dateline2, boundaryPark],
     );
     await t.test(
       'exact range boundaries (latitude ±90, longitude ±180) are accepted',
@@ -425,8 +447,8 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
           await observeAt(northPole, 90, 0);
           await observeAt(southPole, -90, 0);
           await observeAt(dateline, 0, 180);
-          // -180 and 180 are the same meridian, so this is still 0m from `dateline`.
-          await observeAt(dateline, 0, -180);
+          // -180 and 180 are the same meridian, so this is still 0m from `dateline2`.
+          await observeAt(dateline2, 0, -180);
         }),
     );
     await t.test('private favorites are isolated between users', async () => {
@@ -766,11 +788,18 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
           assert.equal(rows[0].user_id, alice);
         }),
     );
-    await t.test('submit_observation produces exactly one 2-point transaction', () =>
-      asUser(alice, async () => {
+    await t.test('submit_observation produces exactly one 2-point transaction', async () => {
+      // A fresh, dedicated point: alice already has recent observations at
+      // locPoint/locPoint2 from earlier tests and would trip the cooldown there.
+      const pointId = 'a2222222-2222-4222-8222-222222222224';
+      await db.query(
+        'insert into public.feeding_points(id,park_id,name,latitude,longitude) values($1,$2,$3,41,29)',
+        [pointId, locPark, 'Puan Testi Noktası'],
+      );
+      await asUser(alice, async () => {
         const { rows: submitted } = await db.query<{ id: string }>(
           'select public.submit_observation($1,$2,$3,$4,$5,$6) as id',
-          [locPoint, 'full', 'full', '', 41, 29],
+          [pointId, 'full', 'full', '', 41, 29],
         );
         const { rows } = await db.query<{ source_type: string; points: number }>(
           'select source_type, points from public.point_transactions where source_id=$1',
@@ -779,8 +808,8 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         assert.equal(rows.length, 1);
         assert.equal(rows[0].source_type, 'observation');
         assert.equal(rows[0].points, 2);
-      }),
-    );
+      });
+    });
     await t.test('rejected feeding and observation produce no point_transactions', () =>
       asUser(alice, async () => {
         const countFor = async (userId: string) =>
@@ -897,6 +926,248 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         );
       }),
     );
+    await t.test('point_transactions_active: RLS applies through the view', async () => {
+      await asUser(alice, async () => {
+        const { rows } = await db.query<{ user_id: string }>(
+          'select user_id from public.point_transactions_active',
+        );
+        assert.ok(rows.length > 0);
+        assert.ok(rows.every((r) => r.user_id === alice));
+      });
+      await asUser(carol, async () => {
+        const { rows } = await db.query<{ user_id: string }>(
+          'select user_id from public.point_transactions_active',
+        );
+        assert.ok(rows.length > 0);
+        assert.ok(rows.every((r) => r.user_id === carol));
+      });
+      await asUser(null, async () => {
+        await assert.rejects(
+          db.query('select * from public.point_transactions_active'),
+          /permission denied/,
+        );
+      });
+    });
+    await t.test(
+      'deleted/hidden feeding keeps its point_transactions row but drops out of the active total',
+      async () => {
+        // asUser's cleanup only resets the role, not the JWT claim GUCs it sets —
+        // nesting a second asUser(...) call inside this one would leak bob's
+        // identity into auth.uid() for the rest of this callback. Every step
+        // below is its own top-level asUser call instead, matching the
+        // sequential (never nested) pattern already used for the moderation
+        // flow in the "park name suggestions" test further down this file.
+        const activeFeedId = 'e0000000-0000-4000-8000-000000000001';
+        const deletedFeedId = 'e0000000-0000-4000-8000-000000000002';
+        const hiddenFeedId = 'e0000000-0000-4000-8000-000000000003';
+        let base = 0;
+        let reportId = '';
+        async function submitFeed(feedId: string) {
+          const photoPath = `${alice}/${feedId}.jpg`;
+          await db.query(
+            "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+            [photoPath, alice],
+          );
+          await db.query('select public.submit_feeding($1::jsonb)', [
+            JSON.stringify(feedingPayload(feedId, alice, photoPath, 41, 29)),
+          ]);
+        }
+        await asUser(alice, async () => {
+          base = (
+            await db.query<{ total: number }>('select public.get_my_points() as total')
+          ).rows[0].total;
+          await submitFeed(activeFeedId);
+          await submitFeed(deletedFeedId);
+          assert.equal(
+            (await db.query<{ total: number }>('select public.get_my_points() as total')).rows[0]
+              .total,
+            base + 20,
+          );
+          // remove_feeding soft-deletes: point_transactions must survive, active total must not.
+          await db.query('select public.remove_feeding($1)', [deletedFeedId]);
+        });
+        const afterDelete = await db.query<{ c: number }>(
+          'select count(*)::int as c from public.point_transactions where source_id=$1',
+          [deletedFeedId],
+        );
+        assert.equal(afterDelete.rows[0].c, 1);
+        await asUser(alice, async () => {
+          assert.equal(
+            (await db.query<{ total: number }>('select public.get_my_points() as total')).rows[0]
+              .total,
+            base + 10,
+          );
+          // Mixed state check: activeFeedId (published) still counts, deletedFeedId does not —
+          // exactly the "published + deleted karışımı" scenario.
+          await submitFeed(hiddenFeedId);
+          await db.query('select public.report_item($1,$2,$3,$4)', [
+            'abuse',
+            'Test report for hide flow.',
+            null,
+            hiddenFeedId,
+          ]);
+          reportId = (
+            await db.query<{ id: string }>(
+              'select id from public.reports where feeding_id=$1 order by created_at desc limit 1',
+              [hiddenFeedId],
+            )
+          ).rows[0].id;
+        });
+        await asUser(
+          bob,
+          async () => {
+            await db.query('select public.resolve_report($1,true)', [reportId]);
+          },
+          true,
+        );
+        const afterHide = await db.query<{ c: number }>(
+          'select count(*)::int as c from public.point_transactions where source_id=$1',
+          [hiddenFeedId],
+        );
+        assert.equal(afterHide.rows[0].c, 1);
+        await asUser(alice, async () => {
+          assert.equal(
+            (await db.query<{ total: number }>('select public.get_my_points() as total')).rows[0]
+              .total,
+            base + 10,
+          );
+        });
+      },
+    );
+    await t.test('observation points still count toward the active total', async () => {
+      const point = 'e4444444-4444-4444-8444-444444444444';
+      await db.query(
+        'insert into public.parks(id,name,latitude,longitude) values($1,$2,41,29)',
+        ['e5555555-5555-4555-8555-555555555555', 'Puan Testi Parkı'],
+      );
+      await db.query(
+        'insert into public.feeding_points(id,park_id,latitude,longitude) values($1,$2,41,29)',
+        [point, 'e5555555-5555-4555-8555-555555555555'],
+      );
+      await asUser(alice, async () => {
+        const before = (
+          await db.query<{ total: number }>('select public.get_my_points() as total')
+        ).rows[0].total;
+        await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+          point,
+          'full',
+          'full',
+          '',
+          41,
+          29,
+        ]);
+        const after = (
+          await db.query<{ total: number }>('select public.get_my_points() as total')
+        ).rows[0].total;
+        assert.equal(after, before + 2);
+      });
+    });
+    await t.test('submit_observation cooldown: same user + same point within 30 minutes', async () => {
+      const cooldownPark = 'e6666666-6666-4666-8666-666666666666',
+        pointA = 'e7777777-7777-4777-8777-777777777777',
+        pointB = 'e8888888-8888-4888-8888-888888888888';
+      await db.query(
+        'insert into public.parks(id,name,latitude,longitude) values($1,$2,41,29)',
+        [cooldownPark, 'Cooldown Testi Parkı'],
+      );
+      await db.query(
+        `insert into public.feeding_points(id,park_id,name,latitude,longitude) values
+          ($1,$3,'Nokta A',41,29),($2,$3,'Nokta B',41,29)`,
+        [pointA, pointB, cooldownPark],
+      );
+      await asUser(alice, async () => {
+        await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+          pointA,
+          'full',
+          'full',
+          '',
+          41,
+          29,
+        ]);
+        // Same user, same point, within the cooldown window: rejected.
+        await assert.rejects(
+          db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+            pointA,
+            'full',
+            'full',
+            '',
+            41,
+            29,
+          ]),
+          /Bu noktayı yakın zamanda kontrol ettin/,
+        );
+        // Same user, different point: not subject to pointA's cooldown.
+        await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+          pointB,
+          'full',
+          'full',
+          '',
+          41,
+          29,
+        ]);
+      });
+      // Backdate pointA's observation past the cooldown window (ambient role —
+      // observations has no client-facing UPDATE grant) and retry: accepted.
+      await db.query(
+        "update public.observations set observed_at=now()-interval '31 minutes' where user_id=$1 and point_id=$2",
+        [alice, pointA],
+      );
+      await asUser(alice, async () => {
+        await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+          pointA,
+          'full',
+          'full',
+          '',
+          41,
+          29,
+        ]);
+      });
+    });
+    await t.test('submit_observation hourly rate limit still applies (regression)', async () => {
+      // A brand new user with zero prior observations, so the 20/hour count is exact.
+      const dave = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+      await db.query(
+        "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"Dave\"}')",
+        [dave],
+      );
+      const rateLimitPark = 'e9999999-9999-4999-8999-999999999999';
+      await db.query(
+        'insert into public.parks(id,name,latitude,longitude) values($1,$2,41,29)',
+        [rateLimitPark, 'Rate Limit Testi Parkı'],
+      );
+      const points: string[] = [];
+      for (let i = 0; i < 21; i++) {
+        const pid = `ea000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+        points.push(pid);
+        await db.query(
+          'insert into public.feeding_points(id,park_id,name,latitude,longitude) values($1,$2,$3,41,29)',
+          [pid, rateLimitPark, `Nokta ${i}`],
+        );
+      }
+      await asUser(dave, async () => {
+        for (let i = 0; i < 20; i++) {
+          await db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+            points[i],
+            'full',
+            'full',
+            '',
+            41,
+            29,
+          ]);
+        }
+        await assert.rejects(
+          db.query('select public.submit_observation($1,$2,$3,$4,$5,$6)', [
+            points[20],
+            'full',
+            'full',
+            '',
+            41,
+            29,
+          ]),
+          /Gözlem sınırına ulaşıldı/,
+        );
+      });
+    });
   } finally {
     await db.close();
   }
