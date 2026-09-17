@@ -54,6 +54,9 @@ export type FeedingDraft = {
   note: string;
   occurred_at: string;
   photo_uri: string;
+  // Absent for demo drafts, which never reach submit_feeding.
+  reported_latitude?: number;
+  reported_longitude?: number;
 };
 export type Pending = FeedingDraft & {
   status: 'pending' | 'error';
@@ -65,6 +68,8 @@ export type Observation = {
   food_status: BowlStatus;
   water_status: BowlStatus;
   note: string;
+  reported_latitude: number;
+  reported_longitude: number;
 };
 export type Viewer = { id: string; name: string; email?: string; moderator?: boolean };
 export type Region = {

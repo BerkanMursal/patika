@@ -19,6 +19,8 @@ import { C } from '../ui/theme';
 import { foodNames, bowlNames } from '../core/domain';
 import { pickPhoto } from '../services/photos';
 import { submitObservation } from '../services/repository';
+import { getDeviceLocation } from '../services/location';
+import { locationFailureMessage } from '../services/location-common';
 export function RecordScreen() {
   const {
       params: { id },
@@ -67,6 +69,16 @@ export function RecordScreen() {
     setError('');
     try {
       if (!app.viewer) throw new Error('Besleme paylaşmak için giriş yapın.');
+      // Demo drafts never reach submit_feeding, so demo mode never prompts for location.
+      let coords: { latitude: number; longitude: number } | undefined;
+      if (!app.demo) {
+        try {
+          coords = await getDeviceLocation();
+        } catch (e) {
+          setError(locationFailureMessage(e, Platform.OS === 'web'));
+          return;
+        }
+      }
       await app.enqueue({
         id: operation.current,
         user_id: app.viewer.id,
@@ -79,6 +91,8 @@ export function RecordScreen() {
         note: note.trim(),
         occurred_at: new Date().toISOString(),
         photo_uri: photo,
+        reported_latitude: coords?.latitude,
+        reported_longitude: coords?.longitude,
       });
       setSaved(true);
     } catch (e) {
@@ -140,7 +154,9 @@ export function RecordScreen() {
                   key={p.id}
                   label={p.name}
                   active={point === p.id}
-                  onPress={() => setPoint(p.id)}
+                  onPress={() => {
+                    if (!loading) setPoint(p.id);
+                  }}
                 />
               ))}
             </View>
@@ -168,6 +184,7 @@ export function RecordScreen() {
                 icon="camera-outline"
                 label="Fotoğraf çek"
                 loading={picking}
+                disabled={loading}
                 onPress={() => void image('camera')}
               />
             </View>
@@ -176,7 +193,7 @@ export function RecordScreen() {
                 secondary
                 icon="images-outline"
                 label="Galeriden seç"
-                disabled={picking}
+                disabled={picking || loading}
                 onPress={() => void image('library')}
               />
             </View>
@@ -190,7 +207,9 @@ export function RecordScreen() {
                 key={id}
                 label={label}
                 active={food === id}
-                onPress={() => setFood(id as FoodType)}
+                onPress={() => {
+                  if (!loading) setFood(id as FoodType);
+                }}
               />
             ))}
           </View>
@@ -202,6 +221,7 @@ export function RecordScreen() {
           onChangeText={setGrams}
           keyboardType="number-pad"
           maxLength={6}
+          editable={!loading}
         />
         <View style={s.wrap}>
           {[100, 250, 500, 1000].map((value) => (
@@ -209,7 +229,9 @@ export function RecordScreen() {
               key={value}
               label={`${value} g`}
               active={grams === String(value)}
-              onPress={() => setGrams(String(value))}
+              onPress={() => {
+                if (!loading) setGrams(String(value));
+              }}
             />
           ))}
         </View>
@@ -220,6 +242,7 @@ export function RecordScreen() {
           onChangeText={setWater}
           keyboardType="number-pad"
           maxLength={6}
+          editable={!loading}
         />
         <View style={s.wrap}>
           {[250, 500, 1000].map((value) => (
@@ -227,7 +250,9 @@ export function RecordScreen() {
               key={value}
               label={`${value} ml`}
               active={water === String(value)}
-              onPress={() => setWater(String(value))}
+              onPress={() => {
+                if (!loading) setWater(String(value));
+              }}
             />
           ))}
         </View>
@@ -238,6 +263,7 @@ export function RecordScreen() {
           onChangeText={setNote}
           multiline
           maxLength={500}
+          editable={!loading}
         />
         <Text style={s.hint}>
           Miktarlar tahminidir. Paylaşım, şu anda bırakılan mama/suya ait olmalıdır.
@@ -271,6 +297,7 @@ export function ObserveScreen() {
     [loading, setLoading] = useState(false),
     [error, setError] = useState(''),
     [done, setDone] = useState(false);
+  const busy = useRef(false);
   useEffect(() => {
     void app
       .getPoints(id)
@@ -281,6 +308,8 @@ export function ObserveScreen() {
       .catch(() => setError('Nokta yüklenemedi.'));
   }, [id]);
   async function save() {
+    if (busy.current) return;
+    busy.current = true;
     setLoading(true);
     setError('');
     try {
@@ -288,13 +317,29 @@ export function ObserveScreen() {
       if (food === 'unknown' && water === 'unknown')
         throw new Error('Gördüğünüz mama veya su durumunu seçin.');
       if (app.demo) app.observeDemo(id, food, water);
-      else
-        await submitObservation({ point_id: point, food_status: food, water_status: water, note });
+      else {
+        let coords;
+        try {
+          coords = await getDeviceLocation();
+        } catch (e) {
+          setError(locationFailureMessage(e, Platform.OS === 'web'));
+          return;
+        }
+        await submitObservation({
+          point_id: point,
+          food_status: food,
+          water_status: water,
+          note,
+          reported_latitude: coords.latitude,
+          reported_longitude: coords.longitude,
+        });
+      }
       setDone(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gözlem gönderilemedi.');
     } finally {
       setLoading(false);
+      busy.current = false;
     }
   }
   return (

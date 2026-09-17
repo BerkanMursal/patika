@@ -95,6 +95,8 @@ export async function submitObservation(input: Observation) {
     p_food: input.food_status,
     p_water: input.water_status,
     p_note: input.note,
+    p_latitude: input.reported_latitude,
+    p_longitude: input.reported_longitude,
   });
   if (error) throw error;
 }
