@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useFocusEffect, useRoute, type RouteProp } from '@react-navigation/native';
+import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../navigation';
 import type { RescueCase, RescueCaseStatus, Vet } from '../core/types';
 import { useApp } from '../state/AppProvider';
@@ -23,7 +24,8 @@ export function RescueCaseScreen() {
   const {
       params: { id },
     } = useRoute<RouteProp<RootStack, 'RescueCase'>>(),
-    app = useApp();
+    app = useApp(),
+    nav = useNavigation<NativeStackNavigationProp<RootStack>>();
   const [rescueCase, setRescueCase] = useState<RescueCase | null>(null),
     [loading, setLoading] = useState(true),
     // Distinguishes "server error, retry" from "confirmed not found" — a
@@ -225,6 +227,14 @@ export function RescueCaseScreen() {
           }
         />
       ) : null}
+      <Button
+        secondary
+        label="Vakayı bildir"
+        icon="flag-outline"
+        onPress={() =>
+          app.viewer ? nav.navigate('Report', { rescueCaseId: id }) : nav.navigate('Auth')
+        }
+      />
     </ScrollView>
   );
 }

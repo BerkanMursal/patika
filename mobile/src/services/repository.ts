@@ -232,12 +232,14 @@ export async function reportItem(
   detail: string,
   parkId?: string,
   feedingId?: string,
+  rescueCaseId?: string,
 ) {
   const { error } = await requireBackend().rpc('report_item', {
     p_reason: reason,
     p_detail: detail,
     p_park_id: parkId ?? null,
     p_feeding_id: feedingId ?? null,
+    p_rescue_case_id: rescueCaseId ?? null,
   });
   if (error) throw error;
 }
@@ -275,6 +277,12 @@ export async function loadReportContext(
       .from('feeding-photos')
       .createSignedUrl(data.feeding.photo_path, 900);
     data.feeding.photo_url = signed.data?.signedUrl;
+  }
+  if (data.rescue?.photo_path) {
+    const signed = await client.storage
+      .from('feeding-photos')
+      .createSignedUrl(data.rescue.photo_path, 900);
+    data.rescue.photo_url = signed.data?.signedUrl;
   }
   return data;
 }

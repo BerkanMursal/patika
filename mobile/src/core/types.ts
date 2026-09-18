@@ -85,11 +85,24 @@ export type Report = {
   status: string;
   feeding_id: string | null;
   park_id: string | null;
+  rescue_case_id: string | null;
   created_at: string;
 };
+export type RescueReportContext = {
+  id: string;
+  description: string;
+  animal_condition: string;
+  status: RescueCaseStatus;
+  photo_path: string;
+  photo_url?: string;
+  latitude: number;
+  longitude: number;
+  hidden_at: string | null;
+};
 export type ReportContext = {
-  park: Pick<Park, 'id' | 'name' | 'city' | 'latitude' | 'longitude'>;
-  feeding: Feeding | null;
+  park?: Pick<Park, 'id' | 'name' | 'city' | 'latitude' | 'longitude'>;
+  feeding?: Feeding | null;
+  rescue?: RescueReportContext;
 };
 export type NameSuggestion = {
   id: string;
@@ -127,7 +140,7 @@ export type RescueCaseDraft = {
 };
 export type RescueCase = {
   id: string;
-  reporter_user_id: string;
+  reporter_user_id: string | null;
   latitude: number;
   longitude: number;
   description: string;

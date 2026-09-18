@@ -126,6 +126,21 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         'utf8',
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL(
+          '../../supabase/migrations/202609180007_rescue_case_account_deletion_integrity.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
+    await db.exec(
+      await readFile(
+        new URL('../../supabase/migrations/202609180008_rescue_moderation.sql', import.meta.url),
+        'utf8',
+      ),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -2421,6 +2436,1017 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
             /permission denied/,
           );
         });
+      },
+    );
+
+    // --- account-deletion x rescue-case integrity ---
+    // A dedicated reporter for this whole section: reporter3's own
+    // report_rescue_case budget (10/day) is already spent by the earlier
+    // vet-assignment tests above — same reasoning as reporter/reporter2/reporter3.
+    const reporter4 = 'ad333333-3333-4333-8333-333333333333';
+    // A second reporter for the tail end of this section: reporter4's own
+    // 10/day budget is spent by the 9 cases created earlier in this same
+    // block (4 volunteer-deletion + 4 orphan-reclaim + 1 resolved) — same
+    // reasoning as every other reporter/reporterN split in this suite.
+    const reporter5 = 'ad444444-4444-4444-8444-444444444444';
+    await db.query(
+      "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"Reporter4\"}'),($2,'{\"display_name\":\"Reporter5\"}')",
+      [reporter4, reporter5],
+    );
+    const statusOrder = ['claimed', 'en_route', 'at_vet', 'treating', 'resolved'];
+    // Creates a case reported by `reporter` (default reporter4), claimed by
+    // `claimant`, then walked forward (via update_rescue_case_status) up to
+    // `targetStatus`.
+    async function createCaseAtStatus(
+      id: string,
+      claimant: string,
+      targetStatus: string,
+      reporter = reporter4,
+    ) {
+      const path = rescuePhotoPath(reporter, id);
+      await insertRescuePhoto(reporter, path);
+      await asUser(reporter, async () => {
+        await db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+          id,
+          41,
+          29,
+          'Test',
+          'Yaralı',
+          path,
+        ]);
+      });
+      await asUser(claimant, async () => {
+        await db.query('select public.claim_rescue_case($1)', [id]);
+        const targetIndex = statusOrder.indexOf(targetStatus);
+        for (let i = 1; i <= targetIndex; i++) {
+          await db.query('select public.update_rescue_case_status($1,$2)', [id, statusOrder[i]]);
+        }
+      });
+    }
+    async function deleteAuthUser(uid: string) {
+      // Ambient (superuser) role, exercising the real FK actions exactly as
+      // auth.admin.deleteUser's own `DELETE FROM auth.users` would.
+      await db.query('delete from auth.users where id=$1', [uid]);
+    }
+    async function fullCaseRow(id: string) {
+      const { rows } = await db.query<{
+        reporter_user_id: string | null;
+        assigned_volunteer_id: string | null;
+        assigned_vet_id: string | null;
+        status: string;
+      }>(
+        'select reporter_user_id, assigned_volunteer_id, assigned_vet_id, status from public.rescue_cases where id=$1',
+        [id],
+      );
+      return rows[0];
+    }
+
+    await t.test(
+      'reporter account deletion: the case row survives with reporter_user_id set to null',
+      async () => {
+        const id = 'b0000000-0000-4000-8000-000000000001';
+        const reporterToDelete = 'ae111111-1111-4111-8111-111111111111';
+        await db.query(
+          "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"ReporterToDelete\"}')",
+          [reporterToDelete],
+        );
+        const path = rescuePhotoPath(reporterToDelete, id);
+        await insertRescuePhoto(reporterToDelete, path);
+        await asUser(reporterToDelete, async () => {
+          await db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            id,
+            41,
+            29,
+            'Test',
+            'Yaralı',
+            path,
+          ]);
+        });
+        await deleteAuthUser(reporterToDelete);
+        const row = await fullCaseRow(id);
+        assert.equal(row.reporter_user_id, null);
+        assert.equal(row.status, 'reported');
+      },
+    );
+
+    for (const [i, status] of ['claimed', 'en_route', 'at_vet', 'treating'].entries()) {
+      await t.test(
+        `volunteer account deletion while case is '${status}': row survives, assigned_volunteer_id becomes null, status unchanged`,
+        async () => {
+          const id = `b0000000-0000-4000-8000-00000000001${i + 1}`;
+          const vol = `ae2${i}1111-1111-4111-8111-111111111111`;
+          await db.query(
+            "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"VolToDelete\"}')",
+            [vol],
+          );
+          await createCaseAtStatus(id, vol, status);
+          await deleteAuthUser(vol);
+          const row = await fullCaseRow(id);
+          assert.equal(row.assigned_volunteer_id, null);
+          assert.equal(row.status, status);
+        },
+      );
+    }
+
+    for (const [i, status] of ['claimed', 'en_route', 'at_vet', 'treating'].entries()) {
+      await t.test(
+        `orphaned '${status}' case can be self-service reclaimed by a new volunteer at its current status`,
+        async () => {
+          const id = `b0000000-0000-4000-8000-00000000002${i + 1}`;
+          const vol = `ae3${i}1111-1111-4111-8111-111111111111`;
+          await db.query(
+            "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"VolOrphan\"}')",
+            [vol],
+          );
+          if (status === 'at_vet') {
+            // Stop one step short and make the en_route->at_vet transition
+            // itself carry the vet, otherwise createCaseAtStatus would
+            // already be sitting at 'at_vet' and this call would just hit
+            // the idempotent-retry branch (same status), never actually
+            // writing assigned_vet_id.
+            await createCaseAtStatus(id, vol, 'en_route');
+            await asUser(vol, async () => {
+              await db.query('select public.update_rescue_case_status($1,$2,$3)', [
+                id,
+                'at_vet',
+                vetActive,
+              ]);
+            });
+          } else {
+            await createCaseAtStatus(id, vol, status);
+          }
+          await deleteAuthUser(vol);
+          await asUser(bob, async () => {
+            const { rows } = await db.query<{ claim_rescue_case: string }>(
+              'select public.claim_rescue_case($1)',
+              [id],
+            );
+            assert.equal(rows[0].claim_rescue_case, id);
+          });
+          const row = await fullCaseRow(id);
+          assert.equal(row.assigned_volunteer_id, bob);
+          // Status is preserved exactly — never reset to 'claimed'.
+          assert.equal(row.status, status);
+          if (status === 'at_vet') assert.equal(row.assigned_vet_id, vetActive);
+        },
+      );
+    }
+
+    await t.test(
+      "a resolved case can never be claimed, orphaned or not, even by its own former volunteer",
+      async () => {
+        const id = 'b0000000-0000-4000-8000-000000000031';
+        const vol = 'ae411111-1111-4111-8111-111111111111';
+        await db.query(
+          "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"VolResolved\"}')",
+          [vol],
+        );
+        await createCaseAtStatus(id, vol, 'resolved');
+        await deleteAuthUser(vol);
+        const before = await fullCaseRow(id);
+        assert.equal(before.status, 'resolved');
+        assert.equal(before.assigned_volunteer_id, null);
+        await asUser(carol, async () => {
+          await assert.rejects(
+            db.query('select public.claim_rescue_case($1)', [id]),
+            /Bu vaka zaten üstlenilmiş veya bu aşamada üstlenilemez/,
+          );
+        });
+        const after = await fullCaseRow(id);
+        assert.equal(after.status, 'resolved');
+        assert.equal(after.assigned_volunteer_id, null);
+      },
+    );
+
+    await t.test(
+      'a case with a live (non-deleted) volunteer cannot be reclaimed by another user, in an in-progress or at_vet/treating status',
+      async () => {
+        for (const status of ['at_vet', 'treating']) {
+          const id = `b0000000-0000-4000-8000-0000000000${status === 'at_vet' ? '41' : '42'}`;
+          await createCaseAtStatus(id, bob, status, reporter5);
+          await asUser(carol, async () => {
+            await assert.rejects(
+              db.query('select public.claim_rescue_case($1)', [id]),
+              /Bu vaka zaten üstlenilmiş veya bu aşamada üstlenilemez/,
+            );
+          });
+          const row = await fullCaseRow(id);
+          assert.equal(row.assigned_volunteer_id, bob);
+          assert.equal(row.status, status);
+        }
+      },
+    );
+
+    await t.test(
+      'orphan reclaim: the same reclaiming user retrying succeeds idempotently at the same (non-reset) status',
+      async () => {
+        const id = 'b0000000-0000-4000-8000-000000000051';
+        const vol = 'ae511111-1111-4111-8111-111111111111';
+        await db.query(
+          "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"VolRetry\"}')",
+          [vol],
+        );
+        await createCaseAtStatus(id, vol, 'en_route', reporter5);
+        await deleteAuthUser(vol);
+        await asUser(carol, async () => {
+          const { rows: first } = await db.query<{ claim_rescue_case: string }>(
+            'select public.claim_rescue_case($1)',
+            [id],
+          );
+          assert.equal(first[0].claim_rescue_case, id);
+          const { rows: second } = await db.query<{ claim_rescue_case: string }>(
+            'select public.claim_rescue_case($1)',
+            [id],
+          );
+          assert.equal(second[0].claim_rescue_case, id);
+        });
+        const row = await fullCaseRow(id);
+        assert.equal(row.assigned_volunteer_id, carol);
+        assert.equal(row.status, 'en_route');
+      },
+    );
+
+    await t.test(
+      'normal (non-orphan) reported/verifying claim is unaffected: still becomes claimed',
+      async () => {
+        const id = 'b0000000-0000-4000-8000-000000000061';
+        const path = rescuePhotoPath(reporter5, id);
+        await insertRescuePhoto(reporter5, path);
+        await asUser(reporter5, async () => {
+          await db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            id,
+            41,
+            29,
+            'Test',
+            'Yaralı',
+            path,
+          ]);
+        });
+        await asUser(bob, async () => {
+          await db.query('select public.claim_rescue_case($1)', [id]);
+        });
+        const row = await fullCaseRow(id);
+        assert.equal(row.status, 'claimed');
+        assert.equal(row.assigned_volunteer_id, bob);
+      },
+    );
+
+    // --- rescue moderation: hidden_at/hidden_by, report_item's rescue
+    // target, resolve_report's hide/dismiss audit trail, RLS/storage
+    // visibility guards, and the claim/status hidden-case freeze. Every
+    // fixture user below is single-use and freshly minted via freshUser(),
+    // so none of them can ever collide with report_rescue_case's 10/day or
+    // report_item's 20/day budget — the one test that actually exercises
+    // that interaction (the duplicate-guard-vs-rate-limit test below) uses
+    // its own dedicated fresh user instead of a shared one.
+    let modFixtureCounter = 0;
+    async function freshUser(label: string) {
+      modFixtureCounter++;
+      const uid = `c${String(modFixtureCounter).padStart(7, '0')}-1111-4111-8111-111111111111`;
+      await db.query('insert into auth.users(id,raw_user_meta_data) values($1,$2)', [
+        uid,
+        JSON.stringify({ display_name: label }),
+      ]);
+      return uid;
+    }
+    // Reports a fresh, visible rescue case via a dedicated, single-use
+    // reporter (so this never touches report_rescue_case's 10/day budget)
+    // and returns that reporter's id.
+    async function createVisibleCase(caseId: string) {
+      const reporterId = await freshUser('ModCaseReporter');
+      const path = rescuePhotoPath(reporterId, caseId);
+      await insertRescuePhoto(reporterId, path);
+      await asUser(reporterId, async () => {
+        await db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+          caseId,
+          41,
+          29,
+          'Test',
+          'Yaralı',
+          path,
+        ]);
+      });
+      return reporterId;
+    }
+    async function rescueCaseModRow(caseId: string) {
+      const { rows } = await db.query<{
+        status: string;
+        hidden_at: string | null;
+        hidden_by: string | null;
+        assigned_volunteer_id: string | null;
+        assigned_vet_id: string | null;
+      }>(
+        'select status, hidden_at, hidden_by, assigned_volunteer_id, assigned_vet_id from public.rescue_cases where id=$1',
+        [caseId],
+      );
+      return rows[0];
+    }
+    async function reportRow(reportId: string) {
+      const { rows } = await db.query<{
+        status: string;
+        resolved_at: string | null;
+        resolved_by: string | null;
+        resolution_action: string | null;
+      }>(
+        'select status, resolved_at, resolved_by, resolution_action from public.reports where id=$1',
+        [reportId],
+      );
+      return rows[0];
+    }
+    // Reports rescue case `caseId` as `reporterId` via report_item and
+    // returns the new report's id.
+    async function reportRescueCaseAs(
+      reporterId: string,
+      caseId: string,
+      detail = 'Test bildirimi',
+    ) {
+      let reportId = '';
+      await asUser(reporterId, async () => {
+        await db.query('select public.report_item($1,$2,$3,$4,$5)', [
+          'abuse',
+          detail,
+          null,
+          null,
+          caseId,
+        ]);
+        reportId = (
+          await db.query<{ id: string }>(
+            'select id from public.reports where rescue_case_id=$1 and user_id=$2 order by created_at desc limit 1',
+            [caseId, reporterId],
+          )
+        ).rows[0].id;
+      });
+      return reportId;
+    }
+    // Reports + hides a case in one shot, via freshly-minted single-use
+    // reporter/moderator identities, for tests that only need the resulting
+    // hidden state rather than exercising the hide flow itself.
+    async function reportAndHide(caseId: string) {
+      const reporterId = await freshUser('ModCaseFlagger');
+      const moderatorId = await freshUser('ModCaseModerator');
+      const reportId = await reportRescueCaseAs(reporterId, caseId);
+      await asUser(
+        moderatorId,
+        async () => {
+          await db.query('select public.resolve_report($1,true)', [reportId]);
+        },
+        true,
+      );
+      return { reporterId, moderatorId, reportId };
+    }
+
+    await t.test('report_item: authenticated user reports a visible rescue case', async () => {
+      const caseId = 'c2000001-0000-4000-8000-000000000001';
+      await createVisibleCase(caseId);
+      const reporterId = await freshUser('Reporter');
+      const reportId = await reportRescueCaseAs(reporterId, caseId, 'Yaralı görünüyor.');
+      const row = await reportRow(reportId);
+      assert.equal(row.status, 'open');
+    });
+
+    await t.test('report_item: anon cannot report a rescue case', async () => {
+      const caseId = 'c2000002-0000-4000-8000-000000000001';
+      await createVisibleCase(caseId);
+      await asUser(null, async () => {
+        await assert.rejects(
+          db.query('select public.report_item($1,$2,$3,$4,$5)', [
+            'abuse',
+            'Test',
+            null,
+            null,
+            caseId,
+          ]),
+          /permission denied|Oturum gerekli/,
+        );
+      });
+    });
+
+    await t.test('report_item: a nonexistent rescue case is rejected', async () => {
+      const reporterId = await freshUser('Reporter');
+      await asUser(reporterId, async () => {
+        await assert.rejects(
+          db.query('select public.report_item($1,$2,$3,$4,$5)', [
+            'abuse',
+            'Test',
+            null,
+            null,
+            'c2000003-9999-4999-8999-999999999999',
+          ]),
+          /Vaka bulunamadı/,
+        );
+      });
+    });
+
+    await t.test('report_item: more than one target in the same call is rejected', async () => {
+      const caseId = 'c2000004-0000-4000-8000-000000000001';
+      await createVisibleCase(caseId);
+      const reporterId = await freshUser('Reporter');
+      await asUser(reporterId, async () => {
+        await assert.rejects(
+          db.query('select public.report_item($1,$2,$3,$4,$5)', [
+            'abuse',
+            'Test',
+            park,
+            null,
+            caseId,
+          ]),
+          /Tam olarak bir hedef/,
+        );
+      });
+    });
+
+    await t.test(
+      'report_item: a duplicate open rescue report from the same user creates only one row',
+      async () => {
+        const caseId = 'c2000005-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const reporterId = await freshUser('Reporter');
+        await asUser(reporterId, async () => {
+          await db.query('select public.report_item($1,$2,$3,$4,$5)', [
+            'abuse',
+            'İlk bildirim metni',
+            null,
+            null,
+            caseId,
+          ]);
+          await db.query('select public.report_item($1,$2,$3,$4,$5)', [
+            'abuse',
+            'Tekrar bildirim metni',
+            null,
+            null,
+            caseId,
+          ]);
+        });
+        const { rows } = await db.query<{ c: number }>(
+          'select count(*)::int as c from public.reports where user_id=$1 and rescue_case_id=$2',
+          [reporterId, caseId],
+        );
+        assert.equal(rows[0].c, 1);
+      },
+    );
+
+    await t.test(
+      'report_item: the duplicate-open guard is checked before the daily rate limit, so 19 duplicate retries never consume budget from the real 20/day cap',
+      async () => {
+        const caseId = 'c2000006-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const reporterId = await freshUser('RateLimitReporter');
+        await asUser(reporterId, async () => {
+          await db.query('select public.report_item($1,$2,$3,$4,$5)', [
+            'abuse',
+            'İlk bildirim metni',
+            null,
+            null,
+            caseId,
+          ]);
+          for (let i = 0; i < 19; i++) {
+            await db.query('select public.report_item($1,$2,$3,$4,$5)', [
+              'abuse',
+              `Tekrar bildirim metni ${i}`,
+              null,
+              null,
+              caseId,
+            ]);
+          }
+          const { rows: dupRows } = await db.query<{ c: number }>(
+            'select count(*)::int as c from public.reports where user_id=$1 and rescue_case_id=$2',
+            [reporterId, caseId],
+          );
+          assert.equal(dupRows[0].c, 1, '19 duplicate retries must not have created extra rows');
+          // The real 20/day budget is untouched by those 19 duplicates: 19
+          // more *distinct* (park) reports bring the real total to exactly
+          // 20 (1 rescue + 19 park)...
+          for (let i = 0; i < 19; i++) {
+            await db.query('select public.report_item($1,$2,$3,$4)', [
+              'abuse',
+              `Park bildirimi ${i}`,
+              park,
+              null,
+            ]);
+          }
+          // ...and the 21st distinct attempt is rejected.
+          await assert.rejects(
+            db.query('select public.report_item($1,$2,$3,$4)', [
+              'abuse',
+              'Aşım bildirimi',
+              park,
+              null,
+            ]),
+            /Günlük bildirim sınırına ulaşıldı/,
+          );
+        });
+      },
+    );
+
+    await t.test(
+      'report_item: a hidden rescue case no longer accepts a new report from a different user',
+      async () => {
+        const caseId = 'c2000007-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        await reportAndHide(caseId);
+        const newReporter = await freshUser('LateReporter');
+        await asUser(newReporter, async () => {
+          await assert.rejects(
+            db.query('select public.report_item($1,$2,$3,$4,$5)', [
+              'abuse',
+              'Test',
+              null,
+              null,
+              caseId,
+            ]),
+            /Vaka bulunamadı/,
+          );
+        });
+      },
+    );
+
+    await t.test('resolve_report: a non-moderator cannot hide a rescue case', async () => {
+      const caseId = 'c2000008-0000-4000-8000-000000000001';
+      await createVisibleCase(caseId);
+      const reporterId = await freshUser('Reporter');
+      const reportId = await reportRescueCaseAs(reporterId, caseId);
+      const nonMod = await freshUser('NonModerator');
+      await asUser(nonMod, async () => {
+        await assert.rejects(
+          db.query('select public.resolve_report($1,true)', [reportId]),
+          /Moderatör yetkisi/,
+        );
+      });
+      const row = await rescueCaseModRow(caseId);
+      assert.equal(row.hidden_at, null);
+    });
+
+    await t.test(
+      'resolve_report(hide=true) on a rescue report: hidden_at/hidden_by set, operational status and both assignments preserved',
+      async () => {
+        const caseId = 'c2000009-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const vol = await freshUser('Volunteer');
+        await asUser(vol, async () => {
+          await db.query('select public.claim_rescue_case($1)', [caseId]);
+          await db.query('select public.update_rescue_case_status($1,$2)', [caseId, 'en_route']);
+          await db.query('select public.update_rescue_case_status($1,$2,$3)', [
+            caseId,
+            'at_vet',
+            vetActive,
+          ]);
+        });
+        const before = await rescueCaseModRow(caseId);
+        assert.equal(before.status, 'at_vet');
+        assert.equal(before.assigned_volunteer_id, vol);
+        assert.equal(before.assigned_vet_id, vetActive);
+        const reporterId = await freshUser('Reporter');
+        const reportId = await reportRescueCaseAs(reporterId, caseId);
+        const moderatorId = await freshUser('Moderator');
+        await asUser(
+          moderatorId,
+          async () => {
+            await db.query('select public.resolve_report($1,true)', [reportId]);
+          },
+          true,
+        );
+        const after = await rescueCaseModRow(caseId);
+        assert.notEqual(after.hidden_at, null);
+        assert.equal(after.hidden_by, moderatorId);
+        assert.equal(after.status, 'at_vet');
+        assert.equal(after.assigned_volunteer_id, vol);
+        assert.equal(after.assigned_vet_id, vetActive);
+        const report = await reportRow(reportId);
+        assert.equal(report.status, 'resolved');
+        assert.equal(report.resolved_by, moderatorId);
+        assert.equal(report.resolution_action, 'hide');
+        assert.notEqual(report.resolved_at, null);
+      },
+    );
+
+    await t.test(
+      'resolve_report(hide=false) on a rescue report: dismiss resolves the report without hiding the case',
+      async () => {
+        const caseId = 'c200000a-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const reporterId = await freshUser('Reporter');
+        const reportId = await reportRescueCaseAs(reporterId, caseId);
+        const moderatorId = await freshUser('Moderator');
+        await asUser(
+          moderatorId,
+          async () => {
+            await db.query('select public.resolve_report($1,false)', [reportId]);
+          },
+          true,
+        );
+        const row = await rescueCaseModRow(caseId);
+        assert.equal(row.hidden_at, null);
+        assert.equal(row.hidden_by, null);
+        const report = await reportRow(reportId);
+        assert.equal(report.status, 'resolved');
+        assert.equal(report.resolved_by, moderatorId);
+        assert.equal(report.resolution_action, 'dismiss');
+      },
+    );
+
+    await t.test(
+      'resolve_report: a retried call on an already-resolved report changes nothing at all',
+      async () => {
+        const caseId = 'c200000b-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const reporterId = await freshUser('Reporter');
+        const reportId = await reportRescueCaseAs(reporterId, caseId);
+        const moderatorId = await freshUser('Moderator');
+        await asUser(
+          moderatorId,
+          async () => {
+            await db.query('select public.resolve_report($1,true)', [reportId]);
+          },
+          true,
+        );
+        const reportAfterFirst = await reportRow(reportId);
+        const caseAfterFirst = await rescueCaseModRow(caseId);
+        const secondModerator = await freshUser('SecondModerator');
+        // Opposite p_hide value on the retry, to prove this is a true no-op
+        // and not merely "the decision happened to repeat".
+        await asUser(
+          secondModerator,
+          async () => {
+            await db.query('select public.resolve_report($1,false)', [reportId]);
+          },
+          true,
+        );
+        const reportAfterSecond = await reportRow(reportId);
+        const caseAfterSecond = await rescueCaseModRow(caseId);
+        assert.equal(reportAfterSecond.resolved_by, reportAfterFirst.resolved_by);
+        assert.equal(reportAfterSecond.resolution_action, reportAfterFirst.resolution_action);
+        assert.equal(
+          new Date(reportAfterSecond.resolved_at!).getTime(),
+          new Date(reportAfterFirst.resolved_at!).getTime(),
+        );
+        assert.equal(
+          new Date(caseAfterSecond.hidden_at!).getTime(),
+          new Date(caseAfterFirst.hidden_at!).getTime(),
+        );
+        assert.equal(caseAfterSecond.hidden_by, caseAfterFirst.hidden_by);
+      },
+    );
+
+    await t.test(
+      'resolve_report: a second, different report hiding an already-hidden case gets its own resolution but never reassigns hidden_by or resets hidden_at',
+      async () => {
+        const caseId = 'c200000c-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const reporterA = await freshUser('ReporterA');
+        const reportA = await reportRescueCaseAs(reporterA, caseId, 'İlk bildirim');
+        const reporterB = await freshUser('ReporterB');
+        const reportB = await reportRescueCaseAs(reporterB, caseId, 'İkinci bildirim');
+        const firstModerator = await freshUser('FirstModerator');
+        await asUser(
+          firstModerator,
+          async () => {
+            await db.query('select public.resolve_report($1,true)', [reportA]);
+          },
+          true,
+        );
+        const afterFirstHide = await rescueCaseModRow(caseId);
+        assert.equal(afterFirstHide.hidden_by, firstModerator);
+        const secondModerator = await freshUser('SecondModerator');
+        await asUser(
+          secondModerator,
+          async () => {
+            await db.query('select public.resolve_report($1,true)', [reportB]);
+          },
+          true,
+        );
+        const afterSecondHide = await rescueCaseModRow(caseId);
+        assert.equal(afterSecondHide.hidden_by, firstModerator);
+        assert.equal(
+          new Date(afterSecondHide.hidden_at!).getTime(),
+          new Date(afterFirstHide.hidden_at!).getTime(),
+        );
+        const reportBRow = await reportRow(reportB);
+        assert.equal(reportBRow.status, 'resolved');
+        assert.equal(reportBRow.resolved_by, secondModerator);
+        assert.equal(reportBRow.resolution_action, 'hide');
+      },
+    );
+
+    await t.test(
+      'rescue_cases_read: a visible case is selectable by any authenticated user',
+      async () => {
+        const caseId = 'c200000d-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const viewer = await freshUser('Viewer');
+        await asUser(viewer, async () => {
+          const { rows } = await db.query('select id from public.rescue_cases where id=$1', [
+            caseId,
+          ]);
+          assert.equal(rows.length, 1);
+        });
+      },
+    );
+
+    await t.test(
+      'rescue_cases_read: a hidden case is invisible to direct SELECT for its own reporter, its assigned volunteer and an unrelated authenticated user alike — the same query getRescueCase()/the map screen run client-side',
+      async () => {
+        const caseId = 'c200000e-0000-4000-8000-000000000001';
+        const reporterId = await createVisibleCase(caseId);
+        const vol = await freshUser('Volunteer');
+        await asUser(vol, async () => {
+          await db.query('select public.claim_rescue_case($1)', [caseId]);
+        });
+        await reportAndHide(caseId);
+        const unrelated = await freshUser('Unrelated');
+        for (const uid of [reporterId, vol, unrelated]) {
+          await asUser(uid, async () => {
+            const { rows } = await db.query('select id from public.rescue_cases where id=$1', [
+              caseId,
+            ]);
+            assert.equal(rows.length, 0);
+          });
+        }
+      },
+    );
+
+    await t.test('rescue map query (status<>resolved) excludes a hidden case', async () => {
+      const caseId = 'c200000f-0000-4000-8000-000000000001';
+      await createVisibleCase(caseId);
+      await reportAndHide(caseId);
+      const viewer = await freshUser('Viewer');
+      await asUser(viewer, async () => {
+        const { rows } = await db.query<{ id: string }>(
+          "select id from public.rescue_cases where status<>'resolved' order by created_at desc limit 500",
+        );
+        assert.ok(!rows.some((r) => r.id === caseId));
+      });
+    });
+
+    await t.test(
+      "get_report_context: a moderator can see a hidden case's full context; a non-moderator cannot",
+      async () => {
+        const caseId = 'c2000010-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const { reportId } = await reportAndHide(caseId);
+        const moderatorId = await freshUser('Moderator');
+        await asUser(
+          moderatorId,
+          async () => {
+            const { rows } = await db.query<{
+              get_report_context: {
+                rescue: { id: string; status: string; hidden_at: string | null };
+              };
+            }>('select public.get_report_context($1) as get_report_context', [reportId]);
+            assert.equal(rows[0].get_report_context.rescue.id, caseId);
+            assert.notEqual(rows[0].get_report_context.rescue.hidden_at, null);
+          },
+          true,
+        );
+        const nonMod = await freshUser('NonModerator');
+        await asUser(nonMod, async () => {
+          await assert.rejects(
+            db.query('select public.get_report_context($1)', [reportId]),
+            /Moderatör yetkisi/,
+          );
+        });
+      },
+    );
+
+    await t.test(
+      'rescue photo storage: a hidden case photo is unreadable by its reporter, its volunteer and any normal authenticated user; readable by a moderator',
+      async () => {
+        const caseId = 'c2000011-0000-4000-8000-000000000001';
+        const reporterId = await createVisibleCase(caseId);
+        const path = rescuePhotoPath(reporterId, caseId);
+        const vol = await freshUser('Volunteer');
+        await asUser(vol, async () => {
+          await db.query('select public.claim_rescue_case($1)', [caseId]);
+        });
+        await reportAndHide(caseId);
+        const unrelated = await freshUser('Unrelated');
+        for (const uid of [reporterId, vol, unrelated]) {
+          await asUser(uid, async () => {
+            const { rows } = await db.query('select name from storage.objects where name=$1', [
+              path,
+            ]);
+            assert.equal(rows.length, 0);
+          });
+        }
+        const moderatorId = await freshUser('Moderator');
+        await asUser(
+          moderatorId,
+          async () => {
+            const { rows } = await db.query('select name from storage.objects where name=$1', [
+              path,
+            ]);
+            assert.equal(rows.length, 1);
+          },
+          true,
+        );
+      },
+    );
+
+    await t.test(
+      'photos_remove_orphan: a hidden but still-referenced rescue photo cannot be deleted by its owner as a false orphan',
+      async () => {
+        const caseId = 'c2000012-0000-4000-8000-000000000001';
+        const reporterId = await createVisibleCase(caseId);
+        const path = rescuePhotoPath(reporterId, caseId);
+        await reportAndHide(caseId);
+        await asUser(reporterId, async () => {
+          await db.query('delete from storage.objects where name=$1', [path]);
+        });
+        // Checked at ambient role (bypasses RLS): the same owner can no
+        // longer even SELECT a hidden case's photo once it's hidden, so
+        // re-checking as reporterId here would conflate "actually deleted"
+        // with "no longer visible" — exactly the separate behavior the
+        // storage-read tests above already cover.
+        const { rows } = await db.query('select 1 from storage.objects where name=$1', [path]);
+        assert.equal(
+          rows.length,
+          1,
+          'hidden but still-referenced photo must survive a delete attempt',
+        );
+      },
+    );
+
+    await t.test('claim_rescue_case: a hidden case cannot be claimed', async () => {
+      const caseId = 'c2000013-0000-4000-8000-000000000001';
+      await createVisibleCase(caseId);
+      await reportAndHide(caseId);
+      const claimant = await freshUser('Claimant');
+      await asUser(claimant, async () => {
+        await assert.rejects(
+          db.query('select public.claim_rescue_case($1)', [caseId]),
+          /zaten üstlenilmiş/,
+        );
+      });
+      const row = await rescueCaseModRow(caseId);
+      assert.equal(row.assigned_volunteer_id, null);
+      assert.equal(row.status, 'reported');
+    });
+
+    await t.test(
+      'claim_rescue_case: a hidden orphaned case cannot be self-service reclaimed',
+      async () => {
+        const caseId = 'c2000014-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const orphanVol = await freshUser('OrphanVolunteer');
+        await asUser(orphanVol, async () => {
+          await db.query('select public.claim_rescue_case($1)', [caseId]);
+        });
+        await deleteAuthUser(orphanVol);
+        await reportAndHide(caseId);
+        const before = await rescueCaseModRow(caseId);
+        assert.equal(before.assigned_volunteer_id, null);
+        assert.equal(before.status, 'claimed');
+        const claimant = await freshUser('Claimant');
+        await asUser(claimant, async () => {
+          await assert.rejects(
+            db.query('select public.claim_rescue_case($1)', [caseId]),
+            /zaten üstlenilmiş/,
+          );
+        });
+        const after = await rescueCaseModRow(caseId);
+        assert.equal(after.assigned_volunteer_id, null);
+      },
+    );
+
+    await t.test(
+      'update_rescue_case_status: a hidden case cannot be advanced, even by its assigned volunteer or a moderator',
+      async () => {
+        const caseId = 'c2000015-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const vol = await freshUser('Volunteer');
+        await asUser(vol, async () => {
+          await db.query('select public.claim_rescue_case($1)', [caseId]);
+        });
+        await reportAndHide(caseId);
+        await asUser(vol, async () => {
+          await assert.rejects(
+            db.query('select public.update_rescue_case_status($1,$2)', [caseId, 'en_route']),
+            /Bu geçiş şu anda yapılamaz/,
+          );
+        });
+        const modAttempt = await freshUser('ModeratorAttempt');
+        await asUser(
+          modAttempt,
+          async () => {
+            await assert.rejects(
+              db.query('select public.update_rescue_case_status($1,$2)', [caseId, 'en_route']),
+              /Bu geçiş şu anda yapılamaz/,
+            );
+          },
+          true,
+        );
+        const row = await rescueCaseModRow(caseId);
+        assert.equal(row.status, 'claimed');
+      },
+    );
+
+    await t.test(
+      'claim_rescue_case: once hidden, a retry of an already-committed claim no longer reports success via the idempotency fallback',
+      async () => {
+        const caseId = 'c2000016-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const vol = await freshUser('Volunteer');
+        await asUser(vol, async () => {
+          await db.query('select public.claim_rescue_case($1)', [caseId]);
+        });
+        await reportAndHide(caseId);
+        await asUser(vol, async () => {
+          await assert.rejects(
+            db.query('select public.claim_rescue_case($1)', [caseId]),
+            /zaten üstlenilmiş/,
+          );
+        });
+      },
+    );
+
+    await t.test(
+      'update_rescue_case_status: once hidden, a retry of an already-committed transition no longer reports success via the idempotency fallback',
+      async () => {
+        const caseId = 'c2000017-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const vol = await freshUser('Volunteer');
+        await asUser(vol, async () => {
+          await db.query('select public.claim_rescue_case($1)', [caseId]);
+          await db.query('select public.update_rescue_case_status($1,$2)', [caseId, 'en_route']);
+        });
+        await reportAndHide(caseId);
+        await asUser(vol, async () => {
+          await assert.rejects(
+            db.query('select public.update_rescue_case_status($1,$2)', [caseId, 'en_route']),
+            /Bu geçiş şu anda yapılamaz/,
+          );
+        });
+      },
+    );
+
+    await t.test(
+      'rescue_cases: direct UPDATE of hidden_at/hidden_by remains denied for authenticated, even for a moderator',
+      async () => {
+        const caseId = 'c200001a-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const modAttempt = await freshUser('ModeratorDirect');
+        await asUser(
+          modAttempt,
+          async () => {
+            await assert.rejects(
+              db.query('update public.rescue_cases set hidden_at=now() where id=$1', [caseId]),
+              /permission denied/,
+            );
+          },
+          true,
+        );
+      },
+    );
+
+    await t.test(
+      'reports: reporter account deletion leaves the report row intact with user_id set to null, and it can still be resolved',
+      async () => {
+        const caseId = 'c2000018-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const throwawayReporter = await freshUser('ThrowawayReporter');
+        const reportId = await reportRescueCaseAs(throwawayReporter, caseId);
+        await deleteAuthUser(throwawayReporter);
+        const { rows } = await db.query<{ user_id: string | null; status: string }>(
+          'select user_id, status from public.reports where id=$1',
+          [reportId],
+        );
+        assert.equal(rows[0].user_id, null);
+        assert.equal(rows[0].status, 'open');
+        const moderatorId = await freshUser('Moderator');
+        await asUser(
+          moderatorId,
+          async () => {
+            await db.query('select public.resolve_report($1,true)', [reportId]);
+          },
+          true,
+        );
+        const after = await rescueCaseModRow(caseId);
+        assert.notEqual(after.hidden_at, null);
+      },
+    );
+
+    await t.test(
+      'moderator account deletion: hidden_by/resolved_by become null but the hidden/resolved state itself survives',
+      async () => {
+        const caseId = 'c2000019-0000-4000-8000-000000000001';
+        await createVisibleCase(caseId);
+        const reporterId = await freshUser('Reporter');
+        const reportId = await reportRescueCaseAs(reporterId, caseId);
+        const throwawayModerator = await freshUser('ThrowawayModerator');
+        await asUser(
+          throwawayModerator,
+          async () => {
+            await db.query('select public.resolve_report($1,true)', [reportId]);
+          },
+          true,
+        );
+        await deleteAuthUser(throwawayModerator);
+        const caseRow = await rescueCaseModRow(caseId);
+        assert.notEqual(caseRow.hidden_at, null);
+        assert.equal(caseRow.hidden_by, null);
+        const report = await reportRow(reportId);
+        assert.equal(report.status, 'resolved');
+        assert.equal(report.resolved_by, null);
+        assert.equal(report.resolution_action, 'hide');
       },
     );
   } finally {

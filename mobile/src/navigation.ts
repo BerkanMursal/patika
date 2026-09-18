@@ -10,7 +10,7 @@ export type RootStack = {
   Favorites: undefined;
   About: undefined;
   Privacy: undefined;
-  Report: { parkId?: string; feedingId?: string };
+  Report: { parkId?: string; feedingId?: string; rescueCaseId?: string };
   Moderation: undefined;
   SuggestName: { id: string };
   NameReview: undefined;

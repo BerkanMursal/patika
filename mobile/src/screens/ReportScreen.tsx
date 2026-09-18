@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { RootStack } from '../navigation';
 import { useApp } from '../state/AppProvider';
@@ -7,6 +7,7 @@ import { Button, Card, Chip, Empty, Field, Notice, textStyles as t } from '../ui
 import { C } from '../ui/theme';
 import * as api from '../services/repository';
 import type { Report, ReportContext } from '../core/types';
+import { rescueCaseStatusNames } from '../core/domain';
 import { FeedingCard } from '../components/FeedingCard';
 const content = {
   padding: 24,
@@ -29,7 +30,8 @@ export function ReportScreen() {
     try {
       if (!app.viewer) throw new Error('Bildirim için giriş yapın.');
       if (detail.trim().length < 10) throw new Error('En az 10 karakterlik bir açıklama ekleyin.');
-      if (!app.demo) await api.reportItem(reason, detail, params.parkId, params.feedingId);
+      if (!app.demo)
+        await api.reportItem(reason, detail, params.parkId, params.feedingId, params.rescueCaseId);
       setDone(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Bildirim gönderilemedi.');
@@ -108,14 +110,35 @@ export function ModerationScreen() {
           <Text style={t.h2}>{r.reason}</Text>
           <Text style={t.body}>{r.detail}</Text>
           {contexts[r.id] ? (
-            <>
-              <Text style={t.h2}>{contexts[r.id].park.name}</Text>
-              <Text style={t.body}>
-                {contexts[r.id].park.city} · {contexts[r.id].park.latitude.toFixed(5)},{' '}
-                {contexts[r.id].park.longitude.toFixed(5)}
-              </Text>
-              {contexts[r.id].feeding ? <FeedingCard event={contexts[r.id].feeding!} /> : null}
-            </>
+            contexts[r.id].rescue ? (
+              <>
+                <Text style={t.h2}>{rescueCaseStatusNames[contexts[r.id].rescue!.status]}</Text>
+                <Text style={t.body}>{contexts[r.id].rescue!.animal_condition}</Text>
+                {contexts[r.id].rescue!.description ? (
+                  <Text style={t.body}>{contexts[r.id].rescue!.description}</Text>
+                ) : null}
+                {contexts[r.id].rescue!.photo_url ? (
+                  <Image
+                    accessibilityLabel="Vaka fotoğrafı"
+                    source={{ uri: contexts[r.id].rescue!.photo_url }}
+                    style={s.photo}
+                  />
+                ) : null}
+                <Text style={t.body}>
+                  {contexts[r.id].rescue!.latitude.toFixed(5)},{' '}
+                  {contexts[r.id].rescue!.longitude.toFixed(5)}
+                </Text>
+              </>
+            ) : (
+              <>
+                <Text style={t.h2}>{contexts[r.id].park!.name}</Text>
+                <Text style={t.body}>
+                  {contexts[r.id].park!.city} · {contexts[r.id].park!.latitude.toFixed(5)},{' '}
+                  {contexts[r.id].park!.longitude.toFixed(5)}
+                </Text>
+                {contexts[r.id].feeding ? <FeedingCard event={contexts[r.id].feeding!} /> : null}
+              </>
+            )
           ) : (
             <Button
               secondary
@@ -156,3 +179,6 @@ export function ModerationScreen() {
     </ScrollView>
   );
 }
+const s = StyleSheet.create({
+  photo: { height: 200, width: '100%', borderRadius: 19, backgroundColor: C.soft },
+});
