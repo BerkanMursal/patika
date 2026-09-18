@@ -9,6 +9,7 @@ import type {
   Report,
   RescueCase,
   RescueCaseDraft,
+  RescueCaseStatus,
 } from '../core/types';
 import { requireBackend } from './supabase';
 import { photoBytes } from './photos';
@@ -118,6 +119,14 @@ export async function reportRescueCase(userId: string, draft: RescueCaseDraft) {
 }
 export async function claimRescueCase(id: string) {
   const { data, error } = await requireBackend().rpc('claim_rescue_case', { p_case_id: id });
+  if (error) throw error;
+  return data as string;
+}
+export async function updateRescueCaseStatus(id: string, status: RescueCaseStatus) {
+  const { data, error } = await requireBackend().rpc('update_rescue_case_status', {
+    p_case_id: id,
+    p_new_status: status,
+  });
   if (error) throw error;
   return data as string;
 }

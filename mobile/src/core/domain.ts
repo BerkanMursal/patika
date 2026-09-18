@@ -17,6 +17,21 @@ export const rescueCaseStatusNames: Record<RescueCaseStatus, string> = {
 export function canClaimRescueCase(c: Pick<import('./types').RescueCase, 'status' | 'assigned_volunteer_id'>) {
   return (c.status === 'reported' || c.status === 'verifying') && !c.assigned_volunteer_id;
 }
+// Matches update_rescue_case_status's own `expected := case p_new_status ...`
+// mapping, inverted (current status -> the one next step). Kept here so the
+// UI can only ever offer a single, valid next action — never a skip.
+export const nextRescueCaseStatus: Partial<Record<RescueCaseStatus, RescueCaseStatus>> = {
+  claimed: 'en_route',
+  en_route: 'at_vet',
+  at_vet: 'treating',
+  treating: 'resolved',
+};
+export const rescueCaseActionLabels: Record<string, string> = {
+  en_route: 'Yola çıktım',
+  at_vet: 'Veterinere ulaştırdım',
+  treating: 'Tedavi başladı',
+  resolved: 'Çözüldü olarak işaretle',
+};
 export function normalizeSearch(value: string) {
   return value
     .trim()

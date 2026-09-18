@@ -1,13 +1,19 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRoute, type RouteProp } from '@react-navigation/native';
 import type { RootStack } from '../navigation';
-import type { RescueCase } from '../core/types';
+import type { RescueCase, RescueCaseStatus } from '../core/types';
 import { useApp } from '../state/AppProvider';
-import { canClaimRescueCase, rescueCaseStatusNames, timeAgo } from '../core/domain';
+import {
+  canClaimRescueCase,
+  nextRescueCaseStatus,
+  rescueCaseActionLabels,
+  rescueCaseStatusNames,
+  timeAgo,
+} from '../core/domain';
 import { Button, Card, Empty, Notice, textStyles as t } from '../ui/common';
 import { C } from '../ui/theme';
-import { claimRescueCase, getRescueCase } from '../services/repository';
+import { claimRescueCase, getRescueCase, updateRescueCaseStatus } from '../services/repository';
 export function RescueCaseScreen() {
   const {
       params: { id },
@@ -19,7 +25,13 @@ export function RescueCaseScreen() {
     // maybeSingle() null must never be shown as a generic load failure.
     [loadError, setLoadError] = useState(false),
     [claiming, setClaiming] = useState(false),
-    [claimError, setClaimError] = useState('');
+    [claimError, setClaimError] = useState(''),
+    [advancing, setAdvancing] = useState(false),
+    [advanceError, setAdvanceError] = useState('');
+  // Pressable's own disabled-while-loading prop is async (a state update),
+  // so a fast double-tap can still queue a second onPress before it commits.
+  // This ref blocks synchronously, same pattern as RecordScreen/RescueReportScreen.
+  const busy = useRef(false);
   async function load() {
     setLoading(true);
     setLoadError(false);
@@ -37,15 +49,38 @@ export function RescueCaseScreen() {
     }, [id]),
   );
   async function claim() {
+    if (busy.current) return;
+    busy.current = true;
     setClaiming(true);
     setClaimError('');
     try {
       await claimRescueCase(id);
+      // Never guess the new state locally — re-fetch the canonical row so
+      // the screen always reflects what the server actually committed.
       await load();
     } catch (e) {
       setClaimError(e instanceof Error ? e.message : 'Vaka üstlenilemedi. Lütfen tekrar deneyin.');
     } finally {
       setClaiming(false);
+      busy.current = false;
+    }
+  }
+  async function advance(next: RescueCaseStatus) {
+    if (busy.current) return;
+    busy.current = true;
+    setAdvancing(true);
+    setAdvanceError('');
+    try {
+      await updateRescueCaseStatus(id, next);
+      // Same rule as claim(): reload from the server instead of setting
+      // rescueCase.status locally. On failure below, rescueCase is left
+      // exactly as it was — only the error notice changes.
+      await load();
+    } catch (e) {
+      setAdvanceError(e instanceof Error ? e.message : 'Durum güncellenemedi. Lütfen tekrar dene.');
+    } finally {
+      setAdvancing(false);
+      busy.current = false;
     }
   }
   if (loading)
@@ -99,6 +134,19 @@ export function RescueCaseScreen() {
             onPress={() => void claim()}
           />
         </>
+      ) : mine && nextRescueCaseStatus[rescueCase.status] ? (
+        <>
+          {advanceError ? <Notice error text={advanceError} /> : null}
+          <Button
+            label={rescueCaseActionLabels[nextRescueCaseStatus[rescueCase.status]!]}
+            icon="arrow-forward-circle-outline"
+            loading={advancing}
+            disabled={!app.viewer}
+            onPress={() => void advance(nextRescueCaseStatus[rescueCase.status]!)}
+          />
+        </>
+      ) : mine && rescueCase.status === 'resolved' ? (
+        <Notice text="Bu vakayı çözdün. Teşekkürler!" />
       ) : rescueCase.assigned_volunteer_id ? (
         <Notice
           text={
