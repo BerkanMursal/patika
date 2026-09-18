@@ -17,4 +17,5 @@ export type RootStack = {
   Leaderboard: undefined;
   RescueReport: undefined;
   RescueCase: { id: string };
+  VetList: undefined;
 };

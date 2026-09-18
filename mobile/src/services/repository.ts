@@ -10,6 +10,7 @@ import type {
   RescueCase,
   RescueCaseDraft,
   RescueCaseStatus,
+  Vet,
 } from '../core/types';
 import { requireBackend } from './supabase';
 import { photoBytes } from './photos';
@@ -143,6 +144,19 @@ export async function getRescueCase(id: string): Promise<RescueCase | null> {
     .from('feeding-photos')
     .createSignedUrl(data.photo_path, 900);
   return { ...data, photo_url: signed?.signedUrl } as RescueCase;
+}
+// T1's own RPC, unchanged: no proximity filter (all three params null, per
+// T1's contract that returns every active veterinarian) and no new
+// is_partner filter invented here — get_vets() already filters to active=true
+// server-side. `.order('name')` only adds deterministic ordering on top of
+// the RPC's result set (PostgREST allows this for a `setof`-returning RPC),
+// it does not change what rows come back.
+export async function getVets(): Promise<Vet[]> {
+  const { data, error } = await requireBackend()
+    .rpc('get_vets', { p_near_lat: null, p_near_lng: null, p_radius_m: null })
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return data ?? [];
 }
 // Map-marker read: minimum columns only (no photo_path/description/reporter_user_id
 // ever leaves the server for this query) via the same authenticated-only

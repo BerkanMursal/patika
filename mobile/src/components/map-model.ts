@@ -1,6 +1,6 @@
 import Supercluster from 'supercluster';
 import { parkStatus } from '../core/domain';
-import type { Park, Region, RescueCase, RescueCaseStatus } from '../core/types';
+import type { Park, Region, RescueCase, RescueCaseStatus, Vet } from '../core/types';
 
 export type MapPark = Pick<Park, 'id' | 'name' | 'latitude' | 'longitude'> & {
   color: string;
@@ -10,9 +10,14 @@ export type MapPark = Pick<Park, 'id' | 'name' | 'latitude' | 'longitude'> & {
 // (no photo_path/description/reporter_user_id ever reaches the map layer).
 export type MapRescueRow = Pick<RescueCase, 'id' | 'latitude' | 'longitude' | 'status'>;
 export type MapRescueCase = Pick<RescueCase, 'id' | 'latitude' | 'longitude'> & { icon: '🚨' | '🙋' };
+// Raw shape the map needs from a get_vets() row — name/address/phone/discount
+// stay in VetListScreen only, never reach the map layer.
+export type MapVetRow = Pick<Vet, 'id' | 'latitude' | 'longitude'>;
+export type MapVet = Pick<Vet, 'id' | 'latitude' | 'longitude'> & { icon: '🏥' };
 export type MapState = {
   parks: MapPark[];
   rescueCases: MapRescueCase[];
+  vets: MapVet[];
   region: Region;
   selected?: string;
   userLocation?: { latitude: number; longitude: number };
@@ -48,6 +53,12 @@ export function mapRescueCases(cases: MapRescueRow[]): MapRescueCase[] {
     longitude: c.longitude,
     icon: unclaimedRescueStatuses.has(c.status) ? '🚨' : '🙋',
   }));
+}
+
+// Fixed single icon — vets have no state machine (unlike rescue cases), so
+// unlike mapRescueCases this is a plain shape copy plus a constant icon.
+export function mapVets(vets: MapVetRow[]): MapVet[] {
+  return vets.map((v) => ({ id: v.id, latitude: v.latitude, longitude: v.longitude, icon: '🏥' }));
 }
 
 export function parkIndex(parks: MapPark[], selected?: string) {

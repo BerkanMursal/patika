@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import type { ParkMapProps } from './Map.types';
 import { mapDocument } from './map-document';
-import { isMapEvent, mapParks, mapRescueCases, type MapState } from './map-model';
+import { isMapEvent, mapParks, mapRescueCases, mapVets, type MapState } from './map-model';
 
 export default function ParkMap(props: ParkMapProps) {
   const frame = useRef<HTMLIFrameElement>(null);
@@ -10,6 +10,7 @@ export default function ParkMap(props: ParkMapProps) {
   const state: MapState = {
     parks: mapParks(props.parks),
     rescueCases: mapRescueCases(props.rescueCases),
+    vets: mapVets(props.vets),
     region: props.region,
     selected: props.selected,
     userLocation: props.userLocation,
@@ -23,6 +24,7 @@ export default function ParkMap(props: ParkMapProps) {
         state: {
           parks: mapParks(p.parks),
           rescueCases: mapRescueCases(p.rescueCases),
+          vets: mapVets(p.vets),
           region: p.region,
           selected: p.selected,
           userLocation: p.userLocation,
@@ -54,7 +56,14 @@ export default function ParkMap(props: ParkMapProps) {
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
   }, []);
-  useEffect(send, [props.parks, props.rescueCases, props.region, props.selected, props.userLocation]);
+  useEffect(send, [
+    props.parks,
+    props.rescueCases,
+    props.vets,
+    props.region,
+    props.selected,
+    props.userLocation,
+  ]);
   return (
     <iframe
       ref={frame}

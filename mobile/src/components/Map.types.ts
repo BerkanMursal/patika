@@ -1,8 +1,9 @@
 import type { Park, Region } from '../core/types';
-import type { MapRescueRow } from './map-model';
+import type { MapRescueRow, MapVetRow } from './map-model';
 export type ParkMapProps = {
   parks: Park[];
   rescueCases: MapRescueRow[];
+  vets: MapVetRow[];
   region: Region;
   selected?: string;
   userLocation?: { latitude: number; longitude: number };

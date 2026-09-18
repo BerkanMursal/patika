@@ -93,6 +93,12 @@ export function ProfileScreen() {
       icon: 'alert-circle-outline',
       route: 'RescueReport',
     },
+    {
+      title: 'Veterinerler',
+      detail: 'Anlaşmalı veterinerler ve indirimler',
+      icon: 'medkit-outline',
+      route: 'VetList',
+    },
     { title: 'Patika hakkında', detail: 'Bir kap, bir umut', icon: 'leaf-outline', route: 'About' },
     {
       title: 'Gizlilik ve topluluk',

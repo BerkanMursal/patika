@@ -3,7 +3,7 @@ import { Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { ParkMapProps } from './Map.types';
 import { mapDocument } from './map-document';
-import { isMapEvent, mapParks, mapRescueCases, scriptJSON } from './map-model';
+import { isMapEvent, mapParks, mapRescueCases, mapVets, scriptJSON } from './map-model';
 
 const sourceLinks = new Set([
   'https://openfreemap.org/',
@@ -15,6 +15,7 @@ const sourceLinks = new Set([
 export default function ParkMap({
   parks,
   rescueCases,
+  vets,
   region,
   selected,
   userLocation,
@@ -26,6 +27,7 @@ export default function ParkMap({
   const state = {
     parks: mapParks(parks),
     rescueCases: mapRescueCases(rescueCases),
+    vets: mapVets(vets),
     region,
     selected,
     userLocation,
@@ -35,7 +37,7 @@ export default function ParkMap({
     web.current?.injectJavaScript(
       `window.updatePatika&&window.updatePatika(${scriptJSON(state)});true;`,
     );
-  useEffect(update, [parks, rescueCases, region, selected, userLocation]);
+  useEffect(update, [parks, rescueCases, vets, region, selected, userLocation]);
   return (
     <WebView
       ref={web}

@@ -140,3 +140,16 @@ export type RescueCase = {
   created_at: string;
   updated_at: string;
 };
+export type Vet = {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  district: string;
+  latitude: number;
+  longitude: number;
+  phone: string;
+  is_partner: boolean;
+  discount_info: string | null;
+  active: boolean;
+};

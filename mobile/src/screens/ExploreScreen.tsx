@@ -15,7 +15,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getDeviceLocation } from '../services/location';
 import { locationFailureMessage } from '../services/location-common';
-import { getRescueCases } from '../services/repository';
+import { getRescueCases, getVets } from '../services/repository';
 import type { RootStack } from '../navigation';
 import type { RescueCaseStatus } from '../core/types';
 import { useApp } from '../state/AppProvider';
@@ -26,6 +26,7 @@ import { ParkCard } from '../components/ParkCard';
 import ParkMap from '../components/ParkMap';
 import { MapParkPreview } from '../components/MapParkPreview';
 type RescueMarkerRow = { id: string; latitude: number; longitude: number; status: RescueCaseStatus };
+type VetMarkerRow = { id: string; latitude: number; longitude: number };
 
 export function ExploreScreen() {
   const app = useApp(),
@@ -39,6 +40,7 @@ export function ExploreScreen() {
     [selected, setSelected] = useState<string>();
   const [visibleCount, setVisibleCount] = useState(24);
   const [rescueCases, setRescueCases] = useState<RescueMarkerRow[]>([]);
+  const [vets, setVets] = useState<VetMarkerRow[]>([]);
   const locationRequest = useRef(0);
   const locationBusy = useRef(false);
   useEffect(
@@ -81,6 +83,29 @@ export function ExploreScreen() {
         cancelled = true;
       };
     }, [app.viewer?.id, app.demo]),
+  );
+  // Vets have no privacy gate (get_vets() grants execute to anon too), so
+  // unlike rescueCases this only needs to clear/refetch on demo, never on
+  // viewer identity — logging in or out must not touch this layer.
+  useEffect(() => {
+    if (app.demo) setVets([]);
+  }, [app.demo]);
+  useFocusEffect(
+    useCallback(() => {
+      if (app.demo) return;
+      let cancelled = false;
+      getVets()
+        .then((rows) => {
+          if (!cancelled) setVets(rows);
+        })
+        .catch(() => {
+          // Same rule as rescue markers: a failed fetch stays silent and
+          // never turns the park map/list into an error state.
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [app.demo]),
   );
   const filtered = useMemo(
     () =>
@@ -196,6 +221,7 @@ export function ExploreScreen() {
           <ParkMap
             parks={filtered}
             rescueCases={rescueCases}
+            vets={vets}
             region={app.region}
             selected={selected}
             userLocation={location}

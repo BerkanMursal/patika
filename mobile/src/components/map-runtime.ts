@@ -42,6 +42,11 @@ export function createMap(
   // layer (same idea as locationMarker below) keeps park cluster counts and
   // selection behavior completely untouched.
   const rescueMarkers = new globalThis.Map<string, Marker>();
+  // Same reasoning as rescueMarkers, kept as its own separate collection
+  // rather than generalizing a shared helper — vets have no tap action (no
+  // selectVet event) and no relation to rescue cases, so the two layers stay
+  // independent rather than sharing code that would couple their behavior.
+  const vetMarkers = new globalThis.Map<string, Marker>();
   let locationMarker: Marker | undefined;
   let areasVisible = true;
   let areasReady = false;
@@ -256,12 +261,43 @@ export function createMap(
         rescueMarkers.delete(id);
       }
   }
+  function drawVets() {
+    if (destroyed) return;
+    const active = new Set<string>();
+    for (const vet of state.vets) {
+      const id = `vet-${vet.id}`;
+      active.add(id);
+      if (vetMarkers.has(id)) continue;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'vet-pin';
+      button.textContent = vet.icon;
+      button.title = 'Patika anlaşmalı veteriner';
+      button.setAttribute('aria-label', button.title);
+      // No tap action by design (T2 scope): the list screen already carries
+      // every field a tap could reveal, so no selectVet event/handler exists.
+      // Not part of tab order either, since activating it would do nothing.
+      button.tabIndex = -1;
+      vetMarkers.set(
+        id,
+        new Marker({ element: button, anchor: 'bottom' })
+          .setLngLat([vet.longitude, vet.latitude])
+          .addTo(map),
+      );
+    }
+    for (const [id, marker] of vetMarkers)
+      if (!active.has(id)) {
+        marker.remove();
+        vetMarkers.delete(id);
+      }
+  }
   function rebuild() {
     index = parkIndex(state.parks, state.selected);
     for (const marker of markers.values()) marker.remove();
     markers.clear();
     draw();
     drawRescue();
+    drawVets();
     syncAreas();
     locationMarker?.remove();
     if (state.userLocation) {

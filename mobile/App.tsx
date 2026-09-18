@@ -31,6 +31,7 @@ import { NameSuggestionScreen, NameReviewScreen } from './src/screens/NameSugges
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { RescueReportScreen } from './src/screens/RescueReportScreen';
 import { RescueCaseScreen } from './src/screens/RescueCaseScreen';
+import { VetListScreen } from './src/screens/VetListScreen';
 const Stack = createNativeStackNavigator<RootStack>(),
   Tabs = createBottomTabNavigator(),
   ref = createNavigationContainerRef<RootStack>();
@@ -173,6 +174,7 @@ function AppNavigation() {
               Leaderboard: 'siralama',
               RescueReport: 'yarali-hayvan',
               RescueCase: 'vaka/:id',
+              VetList: 'veterinerler',
             },
           },
         }}
@@ -252,6 +254,11 @@ function AppNavigation() {
             name="RescueCase"
             component={RescueCaseScreen}
             options={{ title: 'Vaka durumu' }}
+          />
+          <Stack.Screen
+            name="VetList"
+            component={VetListScreen}
+            options={{ title: 'Veterinerler' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

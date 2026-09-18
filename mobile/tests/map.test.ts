@@ -4,10 +4,12 @@ import {
   parkIndex,
   isMapEvent,
   mapRescueCases,
+  mapVets,
   sameRegion,
   scriptJSON,
   type MapPark,
   type MapRescueRow,
+  type MapVetRow,
 } from '../src/components/map-model';
 
 const parks: MapPark[] = [
@@ -136,5 +138,38 @@ test('rescue cases never reach parkIndex/Supercluster \u2014 park clustering is 
   assert.equal(group.properties.point_count, 2);
   assert.equal(features.length, 2);
   // No rescue id/icon ever appears in a park cluster's properties.
+  for (const feature of features) assert.equal('icon' in feature.properties, false);
+});
+
+test('mapVets: every row becomes a fixed 🏥 marker with coordinates passed through', () => {
+  const rows: MapVetRow[] = [
+    { id: 'vet-1', latitude: 40.98, longitude: 29.02 },
+    { id: 'vet-2', latitude: 41.02, longitude: 29.09 },
+  ];
+  const mapped = mapVets(rows);
+  assert.deepEqual(
+    mapped.map((v) => v.icon),
+    ['🏥', '🏥'],
+  );
+  assert.deepEqual(
+    mapped.map((v) => [v.id, v.latitude, v.longitude]),
+    [
+      ['vet-1', 40.98, 29.02],
+      ['vet-2', 41.02, 29.09],
+    ],
+  );
+});
+
+test('vets never reach parkIndex/Supercluster — park clustering is unaffected by their presence', () => {
+  const state = {
+    parks,
+    vets: mapVets([{ id: 'v1', latitude: 41, longitude: 29 }]),
+  };
+  const index = parkIndex(state.parks);
+  const features = index.getClusters(box, 12);
+  const group = features.find((f) => 'cluster' in f.properties);
+  assert.ok(group && 'point_count' in group.properties);
+  assert.equal(group.properties.point_count, 2);
+  assert.equal(features.length, 2);
   for (const feature of features) assert.equal('icon' in feature.properties, false);
 });
