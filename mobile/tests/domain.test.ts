@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  canClaimRescueCase,
   distanceKm,
   mergeFeeding,
   normalizeSearch,
@@ -80,6 +81,22 @@ test('water-only does not replace last food record', () => {
     occurred_at: new Date(now).toISOString(),
   });
   assert.equal(changed.last_fed_at, p.last_fed_at);
+});
+test('canClaimRescueCase matches claim_rescue_case: fresh claim, orphan reclaim of an in-progress case, but never a live-volunteer or resolved case', () => {
+  // Fresh claim: unassigned reported/verifying.
+  assert.equal(canClaimRescueCase({ status: 'reported', assigned_volunteer_id: null }), true);
+  assert.equal(canClaimRescueCase({ status: 'verifying', assigned_volunteer_id: null }), true);
+  // Orphan reclaim: assigned_volunteer_id went null (volunteer deleted their
+  // account) while the case was already in progress — self-service
+  // re-adoption must be offered at each of these statuses.
+  for (const status of ['claimed', 'en_route', 'at_vet', 'treating'] as const)
+    assert.equal(canClaimRescueCase({ status, assigned_volunteer_id: null }), true);
+  // A live (non-deleted) volunteer blocks claiming regardless of status.
+  for (const status of ['reported', 'claimed', 'en_route', 'at_vet', 'treating'] as const)
+    assert.equal(canClaimRescueCase({ status, assigned_volunteer_id: 'some-uid' }), false);
+  // 'resolved' is terminal: never claimable, assigned or not.
+  assert.equal(canClaimRescueCase({ status: 'resolved', assigned_volunteer_id: null }), false);
+  assert.equal(canClaimRescueCase({ status: 'resolved', assigned_volunteer_id: 'some-uid' }), false);
 });
 test('distance and date formatting are bounded', () => {
   assert.equal(distanceKm(41, 29, 41, 29), 0);

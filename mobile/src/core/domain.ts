@@ -11,11 +11,22 @@ export const rescueCaseStatusNames: Record<RescueCaseStatus, string> = {
   treating: 'Tedavi altında',
   resolved: 'Çözüldü',
 };
-// Matches claim_rescue_case's own WHERE clause (reported/verifying, unassigned):
-// kept here so the button's enabled condition can never drift from the RPC's
-// actual contract, even though 'verifying' is not produced by any RPC yet.
+// Matches claim_rescue_case's own WHERE clause exactly: unassigned AND one of
+// these statuses — reported/verifying is a fresh claim, claimed/en_route/
+// at_vet/treating with no assigned_volunteer_id is an orphaned case (its
+// volunteer deleted their account) being self-service re-adopted at its
+// current progress. 'resolved' is deliberately excluded — it is terminal and
+// can never be claimed, orphaned or not, regardless of assigned_volunteer_id.
+const claimableRescueStatuses = new Set<import('./types').RescueCaseStatus>([
+  'reported',
+  'verifying',
+  'claimed',
+  'en_route',
+  'at_vet',
+  'treating',
+]);
 export function canClaimRescueCase(c: Pick<import('./types').RescueCase, 'status' | 'assigned_volunteer_id'>) {
-  return (c.status === 'reported' || c.status === 'verifying') && !c.assigned_volunteer_id;
+  return claimableRescueStatuses.has(c.status) && !c.assigned_volunteer_id;
 }
 // Matches update_rescue_case_status's own `expected := case p_new_status ...`
 // mapping, inverted (current status -> the one next step). Kept here so the
