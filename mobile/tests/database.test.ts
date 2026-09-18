@@ -68,6 +68,24 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         'utf8',
       ),
     );
+    // Same PostGIS gap as migration 001: only the generated geography column
+    // and its gist index are stripped here (table/RLS/GRANT are unaffected).
+    // get_vets()'s body still references extensions.st_dwithin/st_makepoint —
+    // whether that survives CREATE FUNCTION and an actual call in PGlite is
+    // verified by the tests below, not assumed.
+    await db.exec(
+      (
+        await readFile(
+          new URL('../../supabase/migrations/202609180002_veterinarians.sql', import.meta.url),
+          'utf8',
+        )
+      )
+        .replace(
+          /  location extensions\.geography\(Point,4326\) generated always as[\s\S]*? stored,\n/,
+          '',
+        )
+        .replace('create index vets_location on public.veterinarians using gist(location);\n', ''),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -1307,6 +1325,91 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         assert.equal(rows[1].user_id, tieB);
       });
     });
+    const vetActive = 'fe111111-1111-4111-8111-111111111111',
+      vetInactive = 'fe222222-2222-4222-8222-222222222222';
+    await t.test('veterinarians: empty table returns no rows, no error', () =>
+      asUser(null, async () => {
+        const { rows } = await db.query('select * from public.veterinarians');
+        assert.equal(rows.length, 0);
+      }),
+    );
+    await db.query(
+      `insert into public.veterinarians(id,name,latitude,longitude,active) values
+        ($1,'Aktif Veteriner',41,29,true),($2,'Pasif Veteriner',41,29,false)`,
+      [vetActive, vetInactive],
+    );
+    await t.test(
+      'veterinarians: active=true is readable by anon and authenticated, active=false is not',
+      async () => {
+        for (const uid of [null, alice]) {
+          await asUser(uid, async () => {
+            const { rows } = await db.query<{ id: string }>(
+              'select id from public.veterinarians',
+            );
+            assert.deepEqual(rows.map((r) => r.id), [vetActive]);
+          });
+        }
+      },
+    );
+    await t.test('veterinarians: direct insert/update/delete are rejected for authenticated', () =>
+      asUser(alice, async () => {
+        await assert.rejects(
+          db.query("insert into public.veterinarians(name,latitude,longitude) values('x',0,0)"),
+          /permission denied/,
+        );
+        await assert.rejects(
+          db.query('update public.veterinarians set active=false where id=$1', [vetActive]),
+          /permission denied/,
+        );
+        await assert.rejects(
+          db.query('delete from public.veterinarians where id=$1', [vetActive]),
+          /permission denied/,
+        );
+      }),
+    );
+    await t.test(
+      'get_vets: invalid coordinates and non-positive radius are rejected (real production validation path)',
+      () =>
+        asUser(null, async () => {
+          await assert.rejects(
+            db.query('select public.get_vets($1,$2,$3)', [91, 29, null]),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            db.query('select public.get_vets($1,$2,$3)', [41, 181, null]),
+            /Geçersiz konum koordinatı/,
+          );
+          await assert.rejects(
+            db.query('select public.get_vets($1,$2,$3)', [null, null, 0]),
+            /Geçersiz yarıçap/,
+          );
+          await assert.rejects(
+            db.query('select public.get_vets($1,$2,$3)', [null, null, -10]),
+            /Geçersiz yarıçap/,
+          );
+        }),
+    );
+    await t.test(
+      'get_vets: authenticated also reaches the validation path (EXECUTE grant is not the blocker)',
+      () =>
+        asUser(alice, async () => {
+          await assert.rejects(
+            db.query('select public.get_vets($1,$2,$3)', [null, null, -1]),
+            /Geçersiz yarıçap/,
+          );
+        }),
+    );
+    // get_vets()'s data-returning path (empty result via RPC, active-only
+    // filtering via RPC, radius clamp, proximity filter) is NOT exercised
+    // above. PGlite has no PostGIS extension, so the stripped test schema has
+    // no `location` column; any call whose arguments pass validation reaches
+    // `return query ... v.location ...` and fails with
+    // "column v.location does not exist" — confirmed while writing this
+    // suite, not assumed. Only the pre-query validation branches (raised
+    // before that statement runs) are real, tested production code paths
+    // here. The success path needs a real Postgres+PostGIS instance (e.g.
+    // `supabase start`) to verify; it is not covered by this repo's
+    // automated tests.
   } finally {
     await db.close();
   }
