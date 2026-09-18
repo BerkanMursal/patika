@@ -109,3 +109,33 @@ export type NameSuggestion = {
   longitude?: number;
 };
 export type LeaderboardRow = { user_id: string; display_name: string; total_points: number };
+export type RescueCaseStatus =
+  | 'reported'
+  | 'verifying'
+  | 'claimed'
+  | 'en_route'
+  | 'at_vet'
+  | 'treating'
+  | 'resolved';
+export type RescueCaseDraft = {
+  id: string;
+  latitude: number;
+  longitude: number;
+  description: string;
+  animal_condition: string;
+  photo_uri: string;
+};
+export type RescueCase = {
+  id: string;
+  reporter_user_id: string;
+  latitude: number;
+  longitude: number;
+  description: string;
+  animal_condition: string;
+  photo_path: string;
+  status: RescueCaseStatus;
+  assigned_volunteer_id: string | null;
+  assigned_vet_id: string | null;
+  created_at: string;
+  updated_at: string;
+};

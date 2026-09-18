@@ -7,6 +7,7 @@ import type {
   Point,
   Region,
   Report,
+  RescueCaseDraft,
 } from '../core/types';
 import { requireBackend } from './supabase';
 import { photoBytes } from './photos';
@@ -86,6 +87,30 @@ export async function submitFeeding(draft: FeedingDraft) {
   const { photo_uri, ...payload } = draft;
   const { data, error } = await client.rpc('submit_feeding', {
     p_payload: { ...payload, photo_path: path },
+  });
+  if (error) throw error;
+  return data as string;
+}
+export async function reportRescueCase(userId: string, draft: RescueCaseDraft) {
+  const client = requireBackend();
+  const path = `${userId}/rescue-cases/${draft.id}.jpg`;
+  const bytes = await photoBytes(draft.photo_uri);
+  if (bytes.byteLength > 5 * 1024 * 1024)
+    throw new Error('Fotoğraf 5 MB sınırını aşıyor. Daha küçük bir fotoğraf seçin.');
+  const { error: upload } = await client.storage
+    .from('feeding-photos')
+    .upload(path, bytes, { contentType: 'image/jpeg', upsert: false });
+  // A previous attempt may have uploaded the photo before the RPC call failed/timed out;
+  // retrying with the same draft.id reuses this same path, so submit_feeding's
+  // "already exists" tolerance applies here too.
+  if (upload && !/already exists|duplicate/i.test(upload.message)) throw upload;
+  const { data, error } = await client.rpc('report_rescue_case', {
+    p_id: draft.id,
+    p_latitude: draft.latitude,
+    p_longitude: draft.longitude,
+    p_description: draft.description,
+    p_animal_condition: draft.animal_condition,
+    p_photo_path: path,
   });
   if (error) throw error;
   return data as string;

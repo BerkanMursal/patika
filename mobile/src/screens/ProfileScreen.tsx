@@ -87,6 +87,12 @@ export function ProfileScreen() {
       icon: 'trophy-outline',
       route: 'Leaderboard',
     },
+    {
+      title: 'Yaralı hayvan bildir',
+      detail: 'Fotoğraf ve konumla bildirim oluştur',
+      icon: 'alert-circle-outline',
+      route: 'RescueReport',
+    },
     { title: 'Patika hakkında', detail: 'Bir kap, bir umut', icon: 'leaf-outline', route: 'About' },
     {
       title: 'Gizlilik ve topluluk',

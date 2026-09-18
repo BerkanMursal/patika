@@ -86,6 +86,25 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         )
         .replace('create index vets_location on public.veterinarians using gist(location);\n', ''),
     );
+    // Same PostGIS gap as above: strip the generated geography column and its
+    // gist index only. report_rescue_case never selects `location`, so unlike
+    // get_vets it has no untested success-path gap from this stripping.
+    await db.exec(
+      (
+        await readFile(
+          new URL('../../supabase/migrations/202609180003_rescue_cases.sql', import.meta.url),
+          'utf8',
+        )
+      )
+        .replace(
+          /  location extensions\.geography\(Point,4326\) generated always as[\s\S]*? stored,\n/,
+          '',
+        )
+        .replace(
+          'create index rescue_cases_location on public.rescue_cases using gist(location);\n',
+          '',
+        ),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -1410,6 +1429,330 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
     // here. The success path needs a real Postgres+PostGIS instance (e.g.
     // `supabase start`) to verify; it is not covered by this repo's
     // automated tests.
+
+    function rescuePhotoPath(uid: string, id: string) {
+      return `${uid}/rescue-cases/${id}.jpg`;
+    }
+    async function insertRescuePhoto(uid: string, path: string) {
+      await db.query(
+        "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+        [path, uid],
+      );
+    }
+    const rescueId = 'aa111111-1111-4111-8111-111111111111';
+    await t.test('report_rescue_case: anon cannot call the RPC, cannot read rescue_cases', () =>
+      asUser(null, async () => {
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            rescueId,
+            41,
+            29,
+            'Test',
+            'Yaralı',
+            rescuePhotoPath(alice, rescueId),
+          ]),
+          /permission denied/,
+        );
+        await assert.rejects(db.query('select * from public.rescue_cases'), /permission denied/);
+      }),
+    );
+    await t.test('rescue_cases: direct insert/update/delete are rejected for authenticated', () =>
+      asUser(alice, async () => {
+        await assert.rejects(
+          db.query(
+            "insert into public.rescue_cases(id,reporter_user_id,latitude,longitude,animal_condition,photo_path) values(gen_random_uuid(),$1,0,0,'x','x/rescue-cases/y.jpg')",
+            [alice],
+          ),
+          /permission denied/,
+        );
+        await assert.rejects(
+          db.query("update public.rescue_cases set status='resolved' where id=$1", [rescueId]),
+          /permission denied/,
+        );
+        await assert.rejects(
+          db.query('delete from public.rescue_cases where id=$1', [rescueId]),
+          /permission denied/,
+        );
+      }),
+    );
+    await t.test('report_rescue_case requires an uploaded photo', () =>
+      asUser(alice, async () => {
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            rescueId,
+            41,
+            29,
+            'Yolun kenarında yatıyor.',
+            'Bacağından yaralı',
+            rescuePhotoPath(alice, rescueId),
+          ]),
+          /bildirim fotoğrafını yükleyin/,
+        );
+      }),
+    );
+    await t.test('report_rescue_case rejects out-of-range coordinates', () =>
+      asUser(alice, async () => {
+        const path = rescuePhotoPath(alice, rescueId);
+        await insertRescuePhoto(alice, path);
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            rescueId,
+            95,
+            29,
+            'Test',
+            'Yaralı',
+            path,
+          ]),
+          /Geçersiz konum koordinatı/,
+        );
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            rescueId,
+            41,
+            -200,
+            'Test',
+            'Yaralı',
+            path,
+          ]),
+          /Geçersiz konum koordinatı/,
+        );
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            rescueId,
+            null,
+            29,
+            'Test',
+            'Yaralı',
+            path,
+          ]),
+          /Konum bilgisi gerekli/,
+        );
+      }),
+    );
+    await t.test(
+      'report_rescue_case: successful report is reported/unassigned; same id + same reporter retries as a no-op; same id from another user is rejected',
+      async () => {
+        const path = rescuePhotoPath(alice, rescueId);
+        await asUser(alice, async () => {
+          // Photo already uploaded by the previous (failed-then-fixed) test above —
+          // this mirrors the real retry scenario: upload succeeds once, the RPC
+          // call is what gets retried.
+          const { rows: first } = await db.query<{ report_rescue_case: string }>(
+            'select public.report_rescue_case($1,$2,$3,$4,$5,$6)',
+            [rescueId, 41, 29, 'Yolun kenarında yatıyor.', 'Bacağından yaralı', path],
+          );
+          assert.equal(first[0].report_rescue_case, rescueId);
+          const { rows: second } = await db.query<{ report_rescue_case: string }>(
+            'select public.report_rescue_case($1,$2,$3,$4,$5,$6)',
+            [rescueId, 41, 29, 'Yolun kenarında yatıyor.', 'Bacağından yaralı', path],
+          );
+          assert.equal(second[0].report_rescue_case, rescueId);
+        });
+        const { rows } = await db.query<{
+          status: string;
+          reporter_user_id: string;
+          assigned_volunteer_id: string | null;
+          assigned_vet_id: string | null;
+        }>(
+          'select status, reporter_user_id, assigned_volunteer_id, assigned_vet_id from public.rescue_cases where id=$1',
+          [rescueId],
+        );
+        // Retry above must not have created a second row.
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0].status, 'reported');
+        assert.equal(rows[0].reporter_user_id, alice);
+        assert.equal(rows[0].assigned_volunteer_id, null);
+        assert.equal(rows[0].assigned_vet_id, null);
+        await asUser(bob, async () => {
+          const bobPath = rescuePhotoPath(bob, rescueId);
+          await insertRescuePhoto(bob, bobPath);
+          await assert.rejects(
+            db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+              rescueId,
+              41,
+              29,
+              'Başka birinin vakası',
+              'Yaralı',
+              bobPath,
+            ]),
+            /İşlem kimliği kullanılamıyor/,
+          );
+          // Authenticated users other than the reporter can still read the case.
+          const { rows: readRows } = await db.query<{ id: string; reporter_user_id: string }>(
+            'select id, reporter_user_id from public.rescue_cases where id=$1',
+            [rescueId],
+          );
+          assert.equal(readRows.length, 1);
+          assert.equal(readRows[0].reporter_user_id, alice);
+        });
+      },
+    );
+    await t.test('rescue_cases.assigned_vet_id is a real foreign key to veterinarians(id)', async () => {
+      const { rows } = await db.query<{ table_name: string; column_name: string }>(
+        `select ccu.table_name, ccu.column_name
+         from information_schema.table_constraints tc
+         join information_schema.key_column_usage kcu on kcu.constraint_name=tc.constraint_name and kcu.table_name=tc.table_name
+         join information_schema.constraint_column_usage ccu on ccu.constraint_name=tc.constraint_name
+         where tc.table_name='rescue_cases' and tc.constraint_type='FOREIGN KEY' and kcu.column_name='assigned_vet_id'`,
+      );
+      assert.equal(rows.length, 1);
+      assert.equal(rows[0].table_name, 'veterinarians');
+      assert.equal(rows[0].column_name, 'id');
+    });
+    await t.test('rescue_cases: description/animal_condition length constraints are enforced', () =>
+      asUser(alice, async () => {
+        const tooLongDescription = 'fb000000-0000-4000-8000-000000000001';
+        const p1 = rescuePhotoPath(alice, tooLongDescription);
+        await insertRescuePhoto(alice, p1);
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            tooLongDescription,
+            41,
+            29,
+            'x'.repeat(501),
+            'Yaralı',
+            p1,
+          ]),
+        );
+        const emptyCondition = 'fb000000-0000-4000-8000-000000000002';
+        const p2 = rescuePhotoPath(alice, emptyCondition);
+        await insertRescuePhoto(alice, p2);
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            emptyCondition,
+            41,
+            29,
+            'Test',
+            '',
+            p2,
+          ]),
+        );
+        const tooLongCondition = 'fb000000-0000-4000-8000-000000000003';
+        const p3 = rescuePhotoPath(alice, tooLongCondition);
+        await insertRescuePhoto(alice, p3);
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            tooLongCondition,
+            41,
+            29,
+            'Test',
+            'x'.repeat(201),
+            p3,
+          ]),
+        );
+      }),
+    );
+    const finn = 'fa111111-1111-4111-8111-111111111111';
+    await db.query(
+      "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"Finn\"}')",
+      [finn],
+    );
+    await t.test('report_rescue_case daily rate limit: 10 accepted, 11th rejected', () =>
+      asUser(finn, async () => {
+        for (let i = 0; i < 10; i++) {
+          const id = `fa000000-0000-4000-8000-${String(i).padStart(12, '0')}`;
+          const path = rescuePhotoPath(finn, id);
+          await insertRescuePhoto(finn, path);
+          await db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            id,
+            41,
+            29,
+            'Test',
+            'Yaralı',
+            path,
+          ]);
+        }
+        const overflowId = 'fa000000-0000-4000-8000-000000000010';
+        const overflowPath = rescuePhotoPath(finn, overflowId);
+        await insertRescuePhoto(finn, overflowPath);
+        await assert.rejects(
+          db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+            overflowId,
+            41,
+            29,
+            'Test',
+            'Yaralı',
+            overflowPath,
+          ]),
+          /Günlük bildirim sınırına ulaşıldı/,
+        );
+      }),
+    );
+    await t.test(
+      'rescue photo storage INSERT policy: own {uid}/rescue-cases/{id}.jpg accepted; other uid, wrong prefix, wrong extension rejected',
+      () =>
+        asUser(alice, async () => {
+          await db.query(
+            "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+            [rescuePhotoPath(alice, 'fc000000-0000-4000-8000-000000000001'), alice],
+          );
+          await assert.rejects(
+            db.query(
+              "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+              [rescuePhotoPath(bob, 'fc000000-0000-4000-8000-000000000002'), alice],
+            ),
+            /row-level security/,
+          );
+          await assert.rejects(
+            db.query(
+              "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+              [`${alice}/rescue/fc000000-0000-4000-8000-000000000003.jpg`, alice],
+            ),
+            /row-level security/,
+          );
+          await assert.rejects(
+            db.query(
+              "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+              [`${alice}/rescue-cases/fc000000-0000-4000-8000-000000000004.png`, alice],
+            ),
+            /row-level security/,
+          );
+        }),
+    );
+    await t.test(
+      'rescue photo storage SELECT policy: any authenticated user can read a linked case photo, anon cannot',
+      async () => {
+        const path = rescuePhotoPath(alice, rescueId);
+        await asUser(bob, async () => {
+          const { rows } = await db.query('select name from storage.objects where name=$1', [
+            path,
+          ]);
+          assert.equal(rows.length, 1);
+        });
+        await asUser(null, async () => {
+          await assert.rejects(
+            db.query('select name from storage.objects where name=$1', [path]),
+            /permission denied/,
+          );
+        });
+      },
+    );
+    await t.test(
+      'photos_remove_orphan: a photo linked to a rescue_case cannot be deleted, even by its owner',
+      () =>
+        asUser(alice, async () => {
+          const path = rescuePhotoPath(alice, rescueId);
+          const before = await db.query('select 1 from storage.objects where name=$1', [path]);
+          assert.equal(before.rows.length, 1);
+          await db.query('delete from storage.objects where name=$1', [path]);
+          const after = await db.query('select 1 from storage.objects where name=$1', [path]);
+          assert.equal(after.rows.length, 1, 'rescue case photo must survive a delete attempt');
+        }),
+    );
+    await t.test(
+      'photos_remove_orphan: an unreferenced feeding photo can still be deleted by its owner (regression)',
+      () =>
+        asUser(alice, async () => {
+          const path = `${alice}/fd000000-0000-4000-8000-000000000001.jpg`;
+          await db.query(
+            "insert into storage.objects(bucket_id,name,owner_id) values('feeding-photos',$1,$2)",
+            [path, alice],
+          );
+          await db.query('delete from storage.objects where name=$1', [path]);
+          const { rows } = await db.query('select 1 from storage.objects where name=$1', [path]);
+          assert.equal(rows.length, 0);
+        }),
+    );
   } finally {
     await db.close();
   }

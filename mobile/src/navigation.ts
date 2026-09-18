@@ -15,4 +15,5 @@ export type RootStack = {
   SuggestName: { id: string };
   NameReview: undefined;
   Leaderboard: undefined;
+  RescueReport: undefined;
 };
