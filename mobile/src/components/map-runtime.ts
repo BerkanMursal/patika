@@ -37,6 +37,11 @@ export function createMap(
   let lastRegion: Region | undefined;
   let index = parkIndex(state.parks, state.selected);
   const markers = new globalThis.Map<string, Marker>();
+  // Never fed into `index`/Supercluster — rescue cases are rare, urgent
+  // events, not a dense POI catalog to cluster. A separate, always-drawn
+  // layer (same idea as locationMarker below) keeps park cluster counts and
+  // selection behavior completely untouched.
+  const rescueMarkers = new globalThis.Map<string, Marker>();
   let locationMarker: Marker | undefined;
   let areasVisible = true;
   let areasReady = false;
@@ -219,11 +224,44 @@ export function createMap(
         markers.delete(id);
       }
   }
+  function drawRescue() {
+    if (destroyed) return;
+    const active = new Set<string>();
+    for (const rescue of state.rescueCases) {
+      const id = `rescue-${rescue.id}`;
+      active.add(id);
+      if (rescueMarkers.has(id)) continue;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'rescue-pin';
+      button.textContent = rescue.icon;
+      const label =
+        rescue.icon === '🚨' ? 'Yaralı hayvan bildirimi' : 'Bir gönüllü vakayı üstlendi';
+      button.title = label;
+      button.setAttribute('aria-label', label);
+      button.onclick = (event) => {
+        event.stopPropagation();
+        emit({ type: 'selectRescue', id: rescue.id });
+      };
+      rescueMarkers.set(
+        id,
+        new Marker({ element: button, anchor: 'bottom' })
+          .setLngLat([rescue.longitude, rescue.latitude])
+          .addTo(map),
+      );
+    }
+    for (const [id, marker] of rescueMarkers)
+      if (!active.has(id)) {
+        marker.remove();
+        rescueMarkers.delete(id);
+      }
+  }
   function rebuild() {
     index = parkIndex(state.parks, state.selected);
     for (const marker of markers.values()) marker.remove();
     markers.clear();
     draw();
+    drawRescue();
     syncAreas();
     locationMarker?.remove();
     if (state.userLocation) {

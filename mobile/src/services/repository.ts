@@ -144,6 +144,28 @@ export async function getRescueCase(id: string): Promise<RescueCase | null> {
     .createSignedUrl(data.photo_path, 900);
   return { ...data, photo_url: signed?.signedUrl } as RescueCase;
 }
+// Map-marker read: minimum columns only (no photo_path/description/reporter_user_id
+// ever leaves the server for this query) via the same authenticated-only
+// rescue_cases_read RLS policy T9 already grants — no new RPC/migration.
+// created_at is selected only to give `.limit()` a deterministic order; it
+// never reaches the returned rows or the map model.
+export async function getRescueCases(): Promise<
+  Pick<RescueCase, 'id' | 'latitude' | 'longitude' | 'status'>[]
+> {
+  const { data, error } = await requireBackend()
+    .from('rescue_cases')
+    .select('id,latitude,longitude,status,created_at')
+    .neq('status', 'resolved')
+    .order('created_at', { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return (data ?? []).map(({ id, latitude, longitude, status }) => ({
+    id,
+    latitude,
+    longitude,
+    status,
+  }));
+}
 export async function submitObservation(input: Observation) {
   const { error } = await requireBackend().rpc('submit_observation', {
     p_point_id: input.point_id,

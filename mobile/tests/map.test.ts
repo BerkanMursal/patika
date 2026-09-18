@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   parkIndex,
   isMapEvent,
+  mapRescueCases,
   sameRegion,
   scriptJSON,
   type MapPark,
+  type MapRescueRow,
 } from '../src/components/map-model';
 
 const parks: MapPark[] = [
@@ -82,4 +84,57 @@ test('park names cannot break out of the native map script literal', () => {
   const encoded = scriptJSON(value);
   assert.equal(encoded.includes('<'), false);
   assert.deepEqual(JSON.parse(encoded), value);
+});
+
+test('mapRescueCases: reported/verifying are the alert icon, claimed through treating are the volunteer icon', () => {
+  const rows: MapRescueRow[] = [
+    'reported',
+    'verifying',
+    'claimed',
+    'en_route',
+    'at_vet',
+    'treating',
+  ].map((status, i) => ({
+    id: `case-${i}`,
+    latitude: 41,
+    longitude: 29,
+    status: status as MapRescueRow['status'],
+  }));
+  const mapped = mapRescueCases(rows);
+  assert.deepEqual(
+    mapped.map((m) => m.icon),
+    ['\ud83d\udea8', '\ud83d\udea8', '\ud83d\ude4b', '\ud83d\ude4b', '\ud83d\ude4b', '\ud83d\ude4b'],
+  );
+  // Coordinates pass through untouched; id/lat/lng are all the marker needs
+  // beyond the icon.
+  assert.equal(mapped[0].id, 'case-0');
+  assert.equal(mapped[0].latitude, 41);
+  assert.equal(mapped[0].longitude, 29);
+});
+
+test('the map bridge accepts a valid selectRescue event and rejects a non-string id or unknown type', () => {
+  assert.ok(isMapEvent({ type: 'selectRescue', id: 'aa111111-1111-4111-8111-111111111111' }));
+  assert.equal(isMapEvent({ type: 'selectRescue', id: 1 }), false);
+  assert.equal(isMapEvent({ type: 'selectRescue' }), false);
+  assert.equal(isMapEvent({ type: 'selectAnimal', id: 'x' }), false);
+});
+
+test('rescue cases never reach parkIndex/Supercluster \u2014 park clustering is unaffected by their presence', () => {
+  // Same fixture and expectations as "nearby parks cluster..." above: a
+  // MapState carrying rescueCases alongside parks must still cluster parks
+  // identically, because parkIndex only ever consumes state.parks.
+  const state = {
+    parks,
+    rescueCases: mapRescueCases([
+      { id: 'r1', latitude: 41, longitude: 29, status: 'reported' as const },
+    ]),
+  };
+  const index = parkIndex(state.parks);
+  const features = index.getClusters(box, 12);
+  const group = features.find((f) => 'cluster' in f.properties);
+  assert.ok(group && 'point_count' in group.properties);
+  assert.equal(group.properties.point_count, 2);
+  assert.equal(features.length, 2);
+  // No rescue id/icon ever appears in a park cluster's properties.
+  for (const feature of features) assert.equal('icon' in feature.properties, false);
 });

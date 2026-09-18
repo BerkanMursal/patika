@@ -3,7 +3,7 @@ import { Linking } from 'react-native';
 import { WebView } from 'react-native-webview';
 import type { ParkMapProps } from './Map.types';
 import { mapDocument } from './map-document';
-import { isMapEvent, mapParks, scriptJSON } from './map-model';
+import { isMapEvent, mapParks, mapRescueCases, scriptJSON } from './map-model';
 
 const sourceLinks = new Set([
   'https://openfreemap.org/',
@@ -14,20 +14,28 @@ const sourceLinks = new Set([
 ]);
 export default function ParkMap({
   parks,
+  rescueCases,
   region,
   selected,
   userLocation,
   onSelect,
+  onSelectRescue,
   onMove,
 }: ParkMapProps) {
   const web = useRef<WebView>(null);
-  const state = { parks: mapParks(parks), region, selected, userLocation };
+  const state = {
+    parks: mapParks(parks),
+    rescueCases: mapRescueCases(rescueCases),
+    region,
+    selected,
+    userLocation,
+  };
   const html = useMemo(() => mapDocument(state), []);
   const update = () =>
     web.current?.injectJavaScript(
       `window.updatePatika&&window.updatePatika(${scriptJSON(state)});true;`,
     );
-  useEffect(update, [parks, region, selected, userLocation]);
+  useEffect(update, [parks, rescueCases, region, selected, userLocation]);
   return (
     <WebView
       ref={web}
@@ -58,6 +66,8 @@ export default function ParkMap({
           const data = message.event;
           if (data.type === 'ready') update();
           if (data.type === 'select' && parks.some((p) => p.id === data.id)) onSelect(data.id);
+          if (data.type === 'selectRescue' && rescueCases.some((c) => c.id === data.id))
+            onSelectRescue(data.id);
           if (data.type === 'move') onMove(data.region);
         } catch {
           /* Ignore malformed bridge messages. */

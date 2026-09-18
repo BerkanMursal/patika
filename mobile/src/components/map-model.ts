@@ -1,19 +1,27 @@
 import Supercluster from 'supercluster';
 import { parkStatus } from '../core/domain';
-import type { Park, Region } from '../core/types';
+import type { Park, Region, RescueCase, RescueCaseStatus } from '../core/types';
 
 export type MapPark = Pick<Park, 'id' | 'name' | 'latitude' | 'longitude'> & {
   color: string;
   status: string;
 };
+// Raw shape the map needs from a rescue_cases row — never the full RescueCase
+// (no photo_path/description/reporter_user_id ever reaches the map layer).
+export type MapRescueRow = Pick<RescueCase, 'id' | 'latitude' | 'longitude' | 'status'>;
+export type MapRescueCase = Pick<RescueCase, 'id' | 'latitude' | 'longitude'> & { icon: '🚨' | '🙋' };
 export type MapState = {
   parks: MapPark[];
+  rescueCases: MapRescueCase[];
   region: Region;
   selected?: string;
   userLocation?: { latitude: number; longitude: number };
 };
 export type MapEvent =
-  { type: 'ready' } | { type: 'select'; id: string } | { type: 'move'; region: Region };
+  | { type: 'ready' }
+  | { type: 'select'; id: string }
+  | { type: 'selectRescue'; id: string }
+  | { type: 'move'; region: Region };
 
 export function mapParks(parks: Park[]): MapPark[] {
   return parks.map((p) => {
@@ -27,6 +35,19 @@ export function mapParks(parks: Park[]): MapPark[] {
       status: status.label,
     };
   });
+}
+
+// requirements madde 2's own icon rule: unclaimed (reported/verifying) is the
+// alert, everything from claimed through treating means a volunteer is on
+// it. 'resolved' never reaches here — callers filter it out server-side.
+const unclaimedRescueStatuses = new Set<RescueCaseStatus>(['reported', 'verifying']);
+export function mapRescueCases(cases: MapRescueRow[]): MapRescueCase[] {
+  return cases.map((c) => ({
+    id: c.id,
+    latitude: c.latitude,
+    longitude: c.longitude,
+    icon: unclaimedRescueStatuses.has(c.status) ? '🚨' : '🙋',
+  }));
 }
 
 export function parkIndex(parks: MapPark[], selected?: string) {
@@ -51,6 +72,7 @@ export function isMapEvent(value: unknown): value is MapEvent {
   const data = value as Record<string, unknown>;
   if (data.type === 'ready') return true;
   if (data.type === 'select') return typeof data.id === 'string';
+  if (data.type === 'selectRescue') return typeof data.id === 'string';
   if (data.type !== 'move' || !data.region || typeof data.region !== 'object') return false;
   const r = data.region as Region;
   return (

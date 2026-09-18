@@ -15,7 +15,9 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getDeviceLocation } from '../services/location';
 import { locationFailureMessage } from '../services/location-common';
+import { getRescueCases } from '../services/repository';
 import type { RootStack } from '../navigation';
+import type { RescueCaseStatus } from '../core/types';
 import { useApp } from '../state/AppProvider';
 import { C, shadow } from '../ui/theme';
 import { Button, Chip, Empty, Icon, IconButton, Notice, textStyles as t } from '../ui/common';
@@ -23,6 +25,7 @@ import { distanceKm, normalizeSearch, parkStatus } from '../core/domain';
 import { ParkCard } from '../components/ParkCard';
 import ParkMap from '../components/ParkMap';
 import { MapParkPreview } from '../components/MapParkPreview';
+type RescueMarkerRow = { id: string; latitude: number; longitude: number; status: RescueCaseStatus };
 
 export function ExploreScreen() {
   const app = useApp(),
@@ -35,6 +38,7 @@ export function ExploreScreen() {
     [location, setLocation] = useState<{ latitude: number; longitude: number }>(),
     [selected, setSelected] = useState<string>();
   const [visibleCount, setVisibleCount] = useState(24);
+  const [rescueCases, setRescueCases] = useState<RescueMarkerRow[]>([]);
   const locationRequest = useRef(0);
   const locationBusy = useRef(false);
   useEffect(
@@ -50,6 +54,33 @@ export function ExploreScreen() {
       const timer = setTimeout(() => void app.refresh(query), 450);
       return () => clearTimeout(timer);
     }, [query, app.region]),
+  );
+  // Rescue markers are a best-effort overlay on top of the park map: an
+  // unauthenticated/demo viewer must never keep stale markers from a prior
+  // session, and this runs regardless of screen focus so a logout that
+  // happens while Explore is the background tab still clears immediately.
+  useEffect(() => {
+    if (!app.viewer || app.demo) setRescueCases([]);
+  }, [app.viewer?.id, app.demo]);
+  // The actual fetch, separate from the clear above: re-runs on focus (e.g.
+  // coming back from RescueCaseScreen after a claim/status change) so the
+  // map reflects the latest server state without a full app restart.
+  useFocusEffect(
+    useCallback(() => {
+      if (!app.viewer || app.demo) return;
+      let cancelled = false;
+      getRescueCases()
+        .then((rows) => {
+          if (!cancelled) setRescueCases(rows);
+        })
+        .catch(() => {
+          // A failed fetch must never error out the park map/list — rescue
+          // markers are supplementary. Whatever was last loaded is kept.
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [app.viewer?.id, app.demo]),
   );
   const filtered = useMemo(
     () =>
@@ -164,11 +195,13 @@ export function ExploreScreen() {
         <View style={[s.mapCanvas, { height: width > 800 ? 510 : 450 }]}>
           <ParkMap
             parks={filtered}
+            rescueCases={rescueCases}
             region={app.region}
             selected={selected}
             userLocation={location}
             onMove={app.setRegion}
             onSelect={setSelected}
+            onSelectRescue={(id) => nav.navigate('RescueCase', { id })}
           />
           <View style={s.searchOverlay}>
             <View style={s.search}>
