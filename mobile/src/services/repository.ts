@@ -7,6 +7,7 @@ import type {
   Point,
   Region,
   Report,
+  RescueCase,
   RescueCaseDraft,
 } from '../core/types';
 import { requireBackend } from './supabase';
@@ -114,6 +115,25 @@ export async function reportRescueCase(userId: string, draft: RescueCaseDraft) {
   });
   if (error) throw error;
   return data as string;
+}
+export async function claimRescueCase(id: string) {
+  const { data, error } = await requireBackend().rpc('claim_rescue_case', { p_case_id: id });
+  if (error) throw error;
+  return data as string;
+}
+export async function getRescueCase(id: string): Promise<RescueCase | null> {
+  const client = requireBackend();
+  const { data, error } = await client
+    .from('rescue_cases')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) return null;
+  const { data: signed } = await client.storage
+    .from('feeding-photos')
+    .createSignedUrl(data.photo_path, 900);
+  return { ...data, photo_url: signed?.signedUrl } as RescueCase;
 }
 export async function submitObservation(input: Observation) {
   const { error } = await requireBackend().rpc('submit_observation', {

@@ -30,6 +30,7 @@ import { ReportScreen, ModerationScreen } from './src/screens/ReportScreen';
 import { NameSuggestionScreen, NameReviewScreen } from './src/screens/NameSuggestionScreen';
 import { LeaderboardScreen } from './src/screens/LeaderboardScreen';
 import { RescueReportScreen } from './src/screens/RescueReportScreen';
+import { RescueCaseScreen } from './src/screens/RescueCaseScreen';
 const Stack = createNativeStackNavigator<RootStack>(),
   Tabs = createBottomTabNavigator(),
   ref = createNavigationContainerRef<RootStack>();
@@ -171,6 +172,7 @@ function AppNavigation() {
               NameReview: 'park-adi-inceleme',
               Leaderboard: 'siralama',
               RescueReport: 'yarali-hayvan',
+              RescueCase: 'vaka/:id',
             },
           },
         }}
@@ -245,6 +247,11 @@ function AppNavigation() {
             name="RescueReport"
             component={RescueReportScreen}
             options={{ title: 'Yaralı hayvan bildir' }}
+          />
+          <Stack.Screen
+            name="RescueCase"
+            component={RescueCaseScreen}
+            options={{ title: 'Vaka durumu' }}
           />
         </Stack.Navigator>
       </NavigationContainer>

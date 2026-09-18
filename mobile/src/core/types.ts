@@ -133,6 +133,7 @@ export type RescueCase = {
   description: string;
   animal_condition: string;
   photo_path: string;
+  photo_url?: string;
   status: RescueCaseStatus;
   assigned_volunteer_id: string | null;
   assigned_vet_id: string | null;

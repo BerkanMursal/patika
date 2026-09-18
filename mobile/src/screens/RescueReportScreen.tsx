@@ -1,7 +1,9 @@
 import React, { useRef, useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Crypto from 'expo-crypto';
+import type { RootStack } from '../navigation';
 import { useApp } from '../state/AppProvider';
 import { Button, Field, Notice, textStyles as t } from '../ui/common';
 import { C } from '../ui/theme';
@@ -11,7 +13,7 @@ import { getDeviceLocation } from '../services/location';
 import { locationFailureMessage } from '../services/location-common';
 export function RescueReportScreen() {
   const app = useApp(),
-    nav = useNavigation();
+    nav = useNavigation<NativeStackNavigationProp<RootStack>>();
   // Deterministic per-attempt id (RecordScreen's pattern): retrying after a
   // failed submit reuses the same id/photo path, so report_rescue_case's own
   // idempotency guard turns the retry into a no-op instead of a duplicate case.
@@ -83,6 +85,13 @@ export function RescueReportScreen() {
               : 'Yakındaki gönüllülere ve anlaşmalı veterinerlere görünür olacak.'
           }
         />
+        {!app.demo ? (
+          <Button
+            secondary
+            label="Vaka durumunu gör"
+            onPress={() => nav.replace('RescueCase', { id: operation.current })}
+          />
+        ) : null}
         <Button label="Geri dön" onPress={() => nav.goBack()} />
       </View>
     );

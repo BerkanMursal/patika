@@ -1,7 +1,22 @@
-import type { FeedingDraft, Park } from './types';
+import type { FeedingDraft, Park, RescueCaseStatus } from './types';
 
 export const foodNames = { dry: 'Kuru mama', wet: 'Yaş mama', other: 'Diğer mama' };
 export const bowlNames = { full: 'Dolu', low: 'Az kalmış', empty: 'Boş', unknown: 'Bilinmiyor' };
+export const rescueCaseStatusNames: Record<RescueCaseStatus, string> = {
+  reported: 'Bildirildi',
+  verifying: 'Doğrulanıyor',
+  claimed: 'Gönüllü vakayı üstlendi',
+  en_route: 'Gönüllü yolda',
+  at_vet: 'Veterinere ulaştırıldı',
+  treating: 'Tedavi altında',
+  resolved: 'Çözüldü',
+};
+// Matches claim_rescue_case's own WHERE clause (reported/verifying, unassigned):
+// kept here so the button's enabled condition can never drift from the RPC's
+// actual contract, even though 'verifying' is not produced by any RPC yet.
+export function canClaimRescueCase(c: Pick<import('./types').RescueCase, 'status' | 'assigned_volunteer_id'>) {
+  return (c.status === 'reported' || c.status === 'verifying') && !c.assigned_volunteer_id;
+}
 export function normalizeSearch(value: string) {
   return value
     .trim()

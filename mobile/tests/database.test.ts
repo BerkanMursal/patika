@@ -105,6 +105,12 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
           '',
         ),
     );
+    await db.exec(
+      await readFile(
+        new URL('../../supabase/migrations/202609180004_rescue_case_claim.sql', import.meta.url),
+        'utf8',
+      ),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -1752,6 +1758,198 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
           const { rows } = await db.query('select 1 from storage.objects where name=$1', [path]);
           assert.equal(rows.length, 0);
         }),
+    );
+
+    // --- T10: claim_rescue_case ---
+    // A dedicated reporter, kept separate from alice/bob/carol, so these
+    // report_rescue_case calls (10 of them below) never compete with the
+    // report_rescue_case daily-rate-limit budget already exercised by alice
+    // and finn in the T9 tests above.
+    const reporter = 'ac111111-1111-4111-8111-111111111111';
+    await db.query(
+      "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"Reporter\"}')",
+      [reporter],
+    );
+    async function createReportedCase(id: string) {
+      const path = rescuePhotoPath(reporter, id);
+      await insertRescuePhoto(reporter, path);
+      await asUser(reporter, async () => {
+        await db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+          id,
+          41,
+          29,
+          'Test',
+          'Yaralı',
+          path,
+        ]);
+      });
+    }
+    await t.test('claim_rescue_case: anon cannot claim', async () => {
+      const id = 'ab000000-0000-4000-8000-000000000001';
+      await createReportedCase(id);
+      await asUser(null, async () => {
+        await assert.rejects(
+          db.query('select public.claim_rescue_case($1)', [id]),
+          /permission denied/,
+        );
+      });
+    });
+    await t.test('claim_rescue_case: a reported case can be claimed', async () => {
+      const id = 'ab000000-0000-4000-8000-000000000002';
+      // Must run before entering asUser(bob, ...) below: asUser's cleanup
+      // resets ROLE but not the request.jwt.claim.sub GUC it set, so nesting
+      // a second asUser call inside this one would leak identities across
+      // the boundary (see the "deleted/hidden feeding..." test's comment on
+      // the same hazard). createReportedCase does its own asUser(reporter, ...)
+      // internally, so it must stay a sibling call, never nested inside one.
+      await createReportedCase(id);
+      await asUser(bob, async () => {
+        const { rows } = await db.query<{ claim_rescue_case: string }>(
+          'select public.claim_rescue_case($1)',
+          [id],
+        );
+        assert.equal(rows[0].claim_rescue_case, id);
+      });
+      const { rows: caseRows } = await db.query<{
+        status: string;
+        assigned_volunteer_id: string;
+      }>('select status, assigned_volunteer_id from public.rescue_cases where id=$1', [id]);
+      assert.equal(caseRows[0].status, 'claimed');
+      assert.equal(caseRows[0].assigned_volunteer_id, bob);
+    });
+    await t.test(
+      "claim_rescue_case: a 'verifying' case can be claimed (schema-reserved state, currently never produced in practice — proves the client/backend contract holds anyway)",
+      async () => {
+        const id = 'ab000000-0000-4000-8000-000000000003';
+        await createReportedCase(id);
+        // No production RPC ever sets 'verifying' — set it directly here
+        // (ambient role) purely to exercise claim_rescue_case's contract.
+        await db.query("update public.rescue_cases set status='verifying' where id=$1", [id]);
+        await asUser(bob, async () => {
+          await db.query('select public.claim_rescue_case($1)', [id]);
+        });
+        const { rows } = await db.query<{ status: string }>(
+          'select status from public.rescue_cases where id=$1',
+          [id],
+        );
+        assert.equal(rows[0].status, 'claimed');
+      },
+    );
+    await t.test(
+      'claim_rescue_case: first claimant wins; a second, different user is rejected without changing state',
+      async () => {
+        const id = 'ab000000-0000-4000-8000-000000000004';
+        await createReportedCase(id);
+        await asUser(bob, async () => {
+          await db.query('select public.claim_rescue_case($1)', [id]);
+        });
+        await asUser(carol, async () => {
+          await assert.rejects(
+            db.query('select public.claim_rescue_case($1)', [id]),
+            /zaten üstlenilmiş/,
+          );
+        });
+        const { rows } = await db.query<{
+          status: string;
+          assigned_volunteer_id: string;
+        }>('select status, assigned_volunteer_id from public.rescue_cases where id=$1', [id]);
+        // Carol's rejected attempt must not have touched bob's successful claim.
+        assert.equal(rows[0].status, 'claimed');
+        assert.equal(rows[0].assigned_volunteer_id, bob);
+      },
+    );
+    await t.test(
+      "claim_rescue_case: the same user retrying after already claiming succeeds idempotently — this is the SQL contract that also makes the concurrent-same-user case safe (a retry only ever observes its own already-committed claim, never a fresh race)",
+      async () => {
+        const id = 'ab000000-0000-4000-8000-000000000005';
+        // Sibling call, not nested inside asUser(bob, ...) below — see the
+        // comment on the same hazard in "a reported case can be claimed".
+        await createReportedCase(id);
+        await asUser(bob, async () => {
+          const { rows: first } = await db.query<{ claim_rescue_case: string }>(
+            'select public.claim_rescue_case($1)',
+            [id],
+          );
+          assert.equal(first[0].claim_rescue_case, id);
+          const { rows: second } = await db.query<{ claim_rescue_case: string }>(
+            'select public.claim_rescue_case($1)',
+            [id],
+          );
+          assert.equal(second[0].claim_rescue_case, id);
+        });
+        const { rows } = await db.query<{
+          status: string;
+          assigned_volunteer_id: string;
+        }>('select status, assigned_volunteer_id from public.rescue_cases where id=$1', [id]);
+        assert.equal(rows[0].status, 'claimed');
+        assert.equal(rows[0].assigned_volunteer_id, bob);
+      },
+    );
+    await t.test(
+      'claim_rescue_case rejects cases already past the claimable window (claimed/en_route/resolved)',
+      async () => {
+        const cases: Array<[string, string]> = [
+          ['ab000000-0000-4000-8000-000000000006', 'claimed'],
+          ['ab000000-0000-4000-8000-000000000007', 'en_route'],
+          ['ab000000-0000-4000-8000-000000000008', 'resolved'],
+        ];
+        for (const [id, status] of cases) {
+          await createReportedCase(id);
+          await db.query(
+            'update public.rescue_cases set status=$2, assigned_volunteer_id=$3 where id=$1',
+            [id, status, carol],
+          );
+          await asUser(bob, async () => {
+            await assert.rejects(
+              db.query('select public.claim_rescue_case($1)', [id]),
+              /zaten üstlenilmiş/,
+            );
+          });
+        }
+      },
+    );
+    await t.test('claim_rescue_case: nonexistent case fails clearly', () =>
+      asUser(bob, async () => {
+        await assert.rejects(
+          db.query('select public.claim_rescue_case($1)', [
+            'ab000000-0000-4000-8000-000000000099',
+          ]),
+          /Vaka bulunamadı/,
+        );
+      }),
+    );
+    await t.test(
+      'rescue_cases: direct UPDATE remains denied for authenticated, even to claim',
+      async () => {
+        const id = 'ab000000-0000-4000-8000-000000000010';
+        // Sibling call, not nested inside asUser(alice, ...) below — see the
+        // comment on the same hazard in "a reported case can be claimed".
+        await createReportedCase(id);
+        await asUser(alice, async () => {
+          await assert.rejects(
+            db.query("update public.rescue_cases set status='claimed' where id=$1", [id]),
+            /permission denied/,
+          );
+        });
+      },
+    );
+    await t.test(
+      'claim_rescue_case: another authenticated user (not the reporter or claimant) sees the updated assignment/status',
+      async () => {
+        const id = 'ab000000-0000-4000-8000-000000000011';
+        await createReportedCase(id);
+        await asUser(bob, async () => {
+          await db.query('select public.claim_rescue_case($1)', [id]);
+        });
+        await asUser(carol, async () => {
+          const { rows } = await db.query<{
+            status: string;
+            assigned_volunteer_id: string;
+          }>('select status, assigned_volunteer_id from public.rescue_cases where id=$1', [id]);
+          assert.equal(rows[0].status, 'claimed');
+          assert.equal(rows[0].assigned_volunteer_id, bob);
+        });
+      },
     );
   } finally {
     await db.close();

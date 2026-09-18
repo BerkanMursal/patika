@@ -16,4 +16,5 @@ export type RootStack = {
   NameReview: undefined;
   Leaderboard: undefined;
   RescueReport: undefined;
+  RescueCase: { id: string };
 };
