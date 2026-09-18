@@ -7,7 +7,9 @@ import type { RescueCase, RescueCaseStatus, Vet } from '../core/types';
 import { useApp } from '../state/AppProvider';
 import {
   canClaimRescueCase,
+  isRescueCaseAuthError,
   nextRescueCaseStatus,
+  rescueCaseAccessGate,
   rescueCaseActionLabels,
   rescueCaseStatusNames,
   timeAgo,
@@ -20,6 +22,8 @@ import {
   getVets,
   updateRescueCaseStatus,
 } from '../services/repository';
+type RescueCaseLoadState =
+  'unavailable' | 'unauthenticated' | 'loading' | 'notFound' | 'authError' | 'error' | 'success';
 export function RescueCaseScreen() {
   const {
       params: { id },
@@ -27,10 +31,7 @@ export function RescueCaseScreen() {
     app = useApp(),
     nav = useNavigation<NativeStackNavigationProp<RootStack>>();
   const [rescueCase, setRescueCase] = useState<RescueCase | null>(null),
-    [loading, setLoading] = useState(true),
-    // Distinguishes "server error, retry" from "confirmed not found" — a
-    // maybeSingle() null must never be shown as a generic load failure.
-    [loadError, setLoadError] = useState(false),
+    [loadState, setLoadState] = useState<RescueCaseLoadState>('loading'),
     [claiming, setClaiming] = useState(false),
     [claimError, setClaimError] = useState(''),
     [advancing, setAdvancing] = useState(false),
@@ -48,21 +49,49 @@ export function RescueCaseScreen() {
   // (not after the loading/not-found returns below) so the hooks that key
   // off it can run unconditionally on every render.
   const showVetPicker = mine && rescueCase?.status === 'en_route';
+  // Guards against a stale async response (logout, viewer switch, blur or
+  // unmount mid-request) writing success/notFound/authError/error after a
+  // newer request has already superseded it — same generation-counter shape
+  // as AppProvider's own refresh().
+  const loadToken = useRef(0);
   async function load() {
-    setLoading(true);
-    setLoadError(false);
+    const token = ++loadToken.current;
+    const commit = (apply: () => void) => {
+      if (loadToken.current === token) apply();
+    };
+    // App-level session bootstrap not finished yet: app.viewer is not
+    // trustworthy either way (still null even for an already-logged-in
+    // viewer), so wait rather than guessing — the loading state already
+    // shown covers this.
+    if (!app.ready) return;
+    const gate = rescueCaseAccessGate(app.demo, app.viewer?.id);
+    if (gate === 'unavailable') return commit(() => setLoadState('unavailable'));
+    if (gate === 'unauthenticated') return commit(() => setLoadState('unauthenticated'));
+    commit(() => setLoadState('loading'));
     try {
-      setRescueCase(await getRescueCase(id));
-    } catch {
-      setLoadError(true);
-    } finally {
-      setLoading(false);
+      const result = await getRescueCase(id);
+      commit(() => {
+        if (result) {
+          setRescueCase(result);
+          setLoadState('success');
+        } else {
+          setLoadState('notFound');
+        }
+      });
+    } catch (e) {
+      commit(() => setLoadState(isRescueCaseAuthError(e) ? 'authError' : 'error'));
     }
   }
   useFocusEffect(
     useCallback(() => {
       void load();
-    }, [id]),
+      // Invalidates this run's token on blur/unmount so an in-flight
+      // response (no follow-up call to naturally supersede it) can never
+      // write a stale state afterward.
+      return () => {
+        loadToken.current++;
+      };
+    }, [id, app.demo, app.viewer?.id, app.ready]),
   );
   // Vet assignment is optional (product decision) — a failed fetch here must
   // never block the en_route->at_vet transition, so this is entirely
@@ -130,20 +159,30 @@ export function RescueCaseScreen() {
       busy.current = false;
     }
   }
-  if (loading)
+  if (loadState === 'loading')
     return (
       <View style={[s.page, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator color={C.green} />
       </View>
     );
-  if (loadError)
+  if (loadState === 'unavailable')
     return (
       <ScrollView style={s.page} contentContainerStyle={s.content}>
-        <Notice error text="Vaka yüklenemedi. İnternet bağlantını kontrol edip tekrar dene." />
-        <Button label="Tekrar dene" onPress={() => void load()} />
+        <Notice text="Vaka bilgileri demo modda görüntülenemez." />
       </ScrollView>
     );
-  if (!rescueCase)
+  if (loadState === 'unauthenticated' || loadState === 'authError')
+    return (
+      <ScrollView style={s.page} contentContainerStyle={s.content}>
+        <Empty
+          title="Giriş gerekli"
+          detail="Bu vakayı görmek için giriş yapmalısın."
+          icon="lock-closed-outline"
+        />
+        <Button label="Giriş yap" onPress={() => nav.navigate('Auth')} />
+      </ScrollView>
+    );
+  if (loadState === 'notFound')
     return (
       <ScrollView style={s.page} contentContainerStyle={s.content}>
         <Empty
@@ -151,6 +190,13 @@ export function RescueCaseScreen() {
           detail="Bu bildirim kaldırılmış olabilir veya hiç var olmamış olabilir."
           icon="alert-circle-outline"
         />
+      </ScrollView>
+    );
+  if (loadState === 'error' || !rescueCase)
+    return (
+      <ScrollView style={s.page} contentContainerStyle={s.content}>
+        <Notice error text="Vaka yüklenemedi. İnternet bağlantını kontrol edip tekrar dene." />
+        <Button label="Tekrar dene" onPress={() => void load()} />
       </ScrollView>
     );
   return (

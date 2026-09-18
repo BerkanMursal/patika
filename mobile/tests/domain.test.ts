@@ -3,9 +3,11 @@ import assert from 'node:assert/strict';
 import {
   canClaimRescueCase,
   distanceKm,
+  isRescueCaseAuthError,
   mergeFeeding,
   normalizeSearch,
   parkStatus,
+  rescueCaseAccessGate,
   timeAgo,
   validateFeeding,
 } from '../src/core/domain';
@@ -97,6 +99,19 @@ test('canClaimRescueCase matches claim_rescue_case: fresh claim, orphan reclaim 
   // 'resolved' is terminal: never claimable, assigned or not.
   assert.equal(canClaimRescueCase({ status: 'resolved', assigned_volunteer_id: null }), false);
   assert.equal(canClaimRescueCase({ status: 'resolved', assigned_volunteer_id: 'some-uid' }), false);
+});
+test('rescueCaseAccessGate: demo beats missing viewer, a real viewer proceeds', () => {
+  assert.equal(rescueCaseAccessGate(true, 'u'), 'unavailable');
+  assert.equal(rescueCaseAccessGate(false, null), 'unauthenticated');
+  assert.equal(rescueCaseAccessGate(false, undefined), 'unauthenticated');
+  assert.equal(rescueCaseAccessGate(false, 'u'), 'proceed');
+});
+test('isRescueCaseAuthError: only a structured 42501 code counts, never message text or network errors', () => {
+  assert.equal(isRescueCaseAuthError({ code: '42501' }), true);
+  assert.equal(isRescueCaseAuthError({ code: '23514' }), false);
+  assert.equal(isRescueCaseAuthError(new Error('network')), false);
+  assert.equal(isRescueCaseAuthError(null), false);
+  assert.equal(isRescueCaseAuthError(undefined), false);
 });
 test('distance and date formatting are bounded', () => {
   assert.equal(distanceKm(41, 29, 41, 29), 0);

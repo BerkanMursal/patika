@@ -43,6 +43,29 @@ export const rescueCaseActionLabels: Record<string, string> = {
   treating: 'Tedavi başladı',
   resolved: 'Çözüldü olarak işaretle',
 };
+// RescueCaseScreen's own access gate, evaluated before ever calling
+// getRescueCase(id): demo mode has no rescue backend at all, and an
+// unauthenticated viewer can never pass rescue_cases_read RLS — both must be
+// decided locally, without a network round-trip.
+export function rescueCaseAccessGate(
+  demo: boolean,
+  viewerId: string | null | undefined,
+): 'unavailable' | 'unauthenticated' | 'proceed' {
+  if (demo) return 'unavailable';
+  if (!viewerId) return 'unauthenticated';
+  return 'proceed';
+}
+// Structured check only (PostgREST/Postgres insufficient_privilege), never
+// message-string sniffing — a network failure or any other server error must
+// never be mistaken for "sign in again".
+export function isRescueCaseAuthError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '42501'
+  );
+}
 export function normalizeSearch(value: string) {
   return value
     .trim()
