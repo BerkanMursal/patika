@@ -123,10 +123,15 @@ export async function claimRescueCase(id: string) {
   if (error) throw error;
   return data as string;
 }
-export async function updateRescueCaseStatus(id: string, status: RescueCaseStatus) {
+export async function updateRescueCaseStatus(
+  id: string,
+  status: RescueCaseStatus,
+  vetId?: string,
+) {
   const { data, error } = await requireBackend().rpc('update_rescue_case_status', {
     p_case_id: id,
     p_new_status: status,
+    p_vet_id: vetId ?? null,
   });
   if (error) throw error;
   return data as string;
@@ -135,15 +140,24 @@ export async function getRescueCase(id: string): Promise<RescueCase | null> {
   const client = requireBackend();
   const { data, error } = await client
     .from('rescue_cases')
-    .select('*')
+    .select('*, assigned_vet:veterinarians(name)')
     .eq('id', id)
     .maybeSingle();
   if (error) throw error;
   if (!data) return null;
+  // Never spread PostgREST's nested embed straight into the RescueCase
+  // shape — map it explicitly to the flat field the domain type declares.
+  const { assigned_vet, ...row } = data as typeof data & {
+    assigned_vet: { name: string } | null;
+  };
   const { data: signed } = await client.storage
     .from('feeding-photos')
-    .createSignedUrl(data.photo_path, 900);
-  return { ...data, photo_url: signed?.signedUrl } as RescueCase;
+    .createSignedUrl(row.photo_path, 900);
+  return {
+    ...row,
+    photo_url: signed?.signedUrl,
+    assigned_vet_name: assigned_vet?.name ?? null,
+  } as RescueCase;
 }
 // T1's own RPC, unchanged: no proximity filter (all three params null, per
 // T1's contract that returns every active veterinarian) and no new

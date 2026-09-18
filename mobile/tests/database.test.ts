@@ -117,6 +117,15 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         'utf8',
       ),
     );
+    await db.exec(
+      await readFile(
+        new URL(
+          '../../supabase/migrations/202609180006_rescue_case_vet_assignment.sql',
+          import.meta.url,
+        ),
+        'utf8',
+      ),
+    );
     const alice = '11111111-1111-4111-8111-111111111111',
       bob = '22222222-2222-4222-8222-222222222222',
       park = '33333333-3333-4333-8333-333333333333',
@@ -2150,6 +2159,265 @@ test('PostgreSQL access control, ownership, idempotency and chronology', async (
         await asUser(bob, async () => {
           await assert.rejects(
             db.query("update public.rescue_cases set status='en_route' where id=$1", [id]),
+            /permission denied/,
+          );
+        });
+      },
+    );
+
+    // --- T14: veteriner atama (update_rescue_case_status's p_vet_id) ---
+    // A third dedicated reporter: T14 needs 10 fresh cases, and reporter2's
+    // report_rescue_case budget (10/day) is already spent by T11's 8 tests
+    // above — same reasoning as reporter/reporter2 themselves.
+    const reporter3 = 'ad222222-2222-4222-8222-222222222222';
+    await db.query(
+      "insert into auth.users(id,raw_user_meta_data) values($1,'{\"display_name\":\"Reporter3\"}')",
+      [reporter3],
+    );
+    async function createClaimedCaseT14(id: string, claimant: string) {
+      const path = rescuePhotoPath(reporter3, id);
+      await insertRescuePhoto(reporter3, path);
+      await asUser(reporter3, async () => {
+        await db.query('select public.report_rescue_case($1,$2,$3,$4,$5,$6)', [
+          id,
+          41,
+          29,
+          'Test',
+          'Yaralı',
+          path,
+        ]);
+      });
+      await asUser(claimant, async () => {
+        await db.query('select public.claim_rescue_case($1)', [id]);
+      });
+    }
+    async function createEnRouteCase(id: string, claimant: string) {
+      await createClaimedCaseT14(id, claimant);
+      await asUser(claimant, async () => {
+        await db.query('select public.update_rescue_case_status($1,$2)', [id, 'en_route']);
+      });
+    }
+    async function vetCaseRow(id: string) {
+      const { rows } = await db.query<{
+        status: string;
+        assigned_volunteer_id: string;
+        assigned_vet_id: string | null;
+        updated_at: string;
+      }>(
+        'select status, assigned_volunteer_id, assigned_vet_id, updated_at from public.rescue_cases where id=$1',
+        [id],
+      );
+      return rows[0];
+    }
+    await t.test(
+      'update_rescue_case_status: en_route -> at_vet without a vet succeeds; assigned_vet_id stays null',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000001';
+        await createEnRouteCase(id, bob);
+        await asUser(bob, async () => {
+          const { rows } = await db.query<{ update_rescue_case_status: string }>(
+            'select public.update_rescue_case_status($1,$2)',
+            [id, 'at_vet'],
+          );
+          assert.equal(rows[0].update_rescue_case_status, id);
+        });
+        const row = await vetCaseRow(id);
+        assert.equal(row.status, 'at_vet');
+        assert.equal(row.assigned_vet_id, null);
+      },
+    );
+    await t.test(
+      'update_rescue_case_status: en_route -> at_vet with an active vet succeeds and sets assigned_vet_id',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000002';
+        await createEnRouteCase(id, bob);
+        await asUser(bob, async () => {
+          await db.query('select public.update_rescue_case_status($1,$2,$3)', [
+            id,
+            'at_vet',
+            vetActive,
+          ]);
+        });
+        const row = await vetCaseRow(id);
+        assert.equal(row.status, 'at_vet');
+        assert.equal(row.assigned_vet_id, vetActive);
+      },
+    );
+    await t.test(
+      'update_rescue_case_status: en_route -> at_vet with an inactive vet is rejected; the whole transition rolls back',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000003';
+        await createEnRouteCase(id, bob);
+        await asUser(bob, async () => {
+          await assert.rejects(
+            db.query('select public.update_rescue_case_status($1,$2,$3)', [
+              id,
+              'at_vet',
+              vetInactive,
+            ]),
+            /Geçersiz veteriner/,
+          );
+        });
+        const row = await vetCaseRow(id);
+        // Rejection rolls back the status change too, not just the vet write.
+        assert.equal(row.status, 'en_route');
+        assert.equal(row.assigned_vet_id, null);
+      },
+    );
+    await t.test(
+      'update_rescue_case_status: en_route -> at_vet with a nonexistent vet_id is rejected',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000004';
+        await createEnRouteCase(id, bob);
+        await asUser(bob, async () => {
+          await assert.rejects(
+            db.query('select public.update_rescue_case_status($1,$2,$3)', [
+              id,
+              'at_vet',
+              'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            ]),
+            /Geçersiz veteriner/,
+          );
+        });
+        assert.equal((await vetCaseRow(id)).status, 'en_route');
+      },
+    );
+    await t.test(
+      'update_rescue_case_status: p_vet_id is rejected for any transition other than en_route -> at_vet, state unchanged',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000005';
+        await createClaimedCaseT14(id, bob);
+        await asUser(bob, async () => {
+          await assert.rejects(
+            db.query('select public.update_rescue_case_status($1,$2,$3)', [
+              id,
+              'en_route',
+              vetActive,
+            ]),
+            /Veteriner yalnızca/,
+          );
+        });
+        assert.equal((await vetCaseRow(id)).status, 'claimed');
+        await asUser(bob, async () => {
+          await db.query('select public.update_rescue_case_status($1,$2)', [id, 'en_route']);
+          await db.query('select public.update_rescue_case_status($1,$2)', [id, 'at_vet']);
+          await assert.rejects(
+            db.query('select public.update_rescue_case_status($1,$2,$3)', [
+              id,
+              'treating',
+              vetActive,
+            ]),
+            /Veteriner yalnızca/,
+          );
+        });
+        const row = await vetCaseRow(id);
+        assert.equal(row.status, 'at_vet');
+        assert.equal(row.assigned_vet_id, null);
+      },
+    );
+    await t.test(
+      "update_rescue_case_status: retrying the same en_route -> at_vet transition with a different (even invalid/inactive) vet_id keeps the first-assigned vet and does not re-bump updated_at — the retry never re-validates p_vet_id because it never re-enters the 'real transition' branch",
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000006';
+        await createEnRouteCase(id, bob);
+        await asUser(bob, async () => {
+          await db.query('select public.update_rescue_case_status($1,$2,$3)', [
+            id,
+            'at_vet',
+            vetActive,
+          ]);
+        });
+        const afterFirst = await vetCaseRow(id);
+        await asUser(bob, async () => {
+          // vetInactive would fail validation on a real transition — proves
+          // this retry path skips vet validation entirely, not just the write.
+          const { rows } = await db.query<{ update_rescue_case_status: string }>(
+            'select public.update_rescue_case_status($1,$2,$3)',
+            [id, 'at_vet', vetInactive],
+          );
+          assert.equal(rows[0].update_rescue_case_status, id);
+        });
+        const afterSecond = await vetCaseRow(id);
+        assert.equal(afterSecond.status, 'at_vet');
+        assert.equal(afterSecond.assigned_vet_id, vetActive);
+        assert.equal(
+          new Date(afterSecond.updated_at).getTime(),
+          new Date(afterFirst.updated_at).getTime(),
+        );
+      },
+    );
+    await t.test(
+      'update_rescue_case_status: the old 2-argument call shape (no p_vet_id) still drives the full claimed -> resolved sequence unchanged',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000007';
+        // Sibling call, not nested inside asUser(bob, ...) below —
+        // createClaimedCaseT14 does its own asUser(reporter3, ...)/asUser(bob, ...)
+        // internally, so nesting it would leak identities across the boundary
+        // (see the same hazard noted for T10/T11's helpers above).
+        await createClaimedCaseT14(id, bob);
+        await asUser(bob, async () => {
+          for (const next of ['en_route', 'at_vet', 'treating', 'resolved']) {
+            const { rows } = await db.query<{ update_rescue_case_status: string }>(
+              'select public.update_rescue_case_status($1,$2)',
+              [id, next],
+            );
+            assert.equal(rows[0].update_rescue_case_status, id);
+          }
+        });
+      },
+    );
+    await t.test(
+      'update_rescue_case_status: a non-assigned, non-moderator user cannot assign a vet either',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000008';
+        await createEnRouteCase(id, bob);
+        await asUser(carol, async () => {
+          await assert.rejects(
+            db.query('select public.update_rescue_case_status($1,$2,$3)', [
+              id,
+              'at_vet',
+              vetActive,
+            ]),
+            /Bu geçiş şu anda yapılamaz/,
+          );
+        });
+        const row = await vetCaseRow(id);
+        assert.equal(row.status, 'en_route');
+        assert.equal(row.assigned_vet_id, null);
+      },
+    );
+    await t.test(
+      'update_rescue_case_status: a moderator can assign a vet on a case claimed by someone else',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000009';
+        await createEnRouteCase(id, bob);
+        await asUser(
+          carol,
+          async () => {
+            await db.query('select public.update_rescue_case_status($1,$2,$3)', [
+              id,
+              'at_vet',
+              vetActive,
+            ]);
+          },
+          true,
+        );
+        const row = await vetCaseRow(id);
+        assert.equal(row.status, 'at_vet');
+        assert.equal(row.assigned_vet_id, vetActive);
+      },
+    );
+    await t.test(
+      'rescue_cases: direct UPDATE of assigned_vet_id remains denied for authenticated',
+      async () => {
+        const id = 'af000000-0000-4000-8000-000000000010';
+        await createEnRouteCase(id, bob);
+        await asUser(bob, async () => {
+          await assert.rejects(
+            db.query('update public.rescue_cases set assigned_vet_id=$2 where id=$1', [
+              id,
+              vetActive,
+            ]),
             /permission denied/,
           );
         });

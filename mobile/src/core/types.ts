@@ -137,6 +137,7 @@ export type RescueCase = {
   status: RescueCaseStatus;
   assigned_volunteer_id: string | null;
   assigned_vet_id: string | null;
+  assigned_vet_name?: string | null;
   created_at: string;
   updated_at: string;
 };

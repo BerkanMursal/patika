@@ -1,8 +1,8 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRoute, type RouteProp } from '@react-navigation/native';
 import type { RootStack } from '../navigation';
-import type { RescueCase, RescueCaseStatus } from '../core/types';
+import type { RescueCase, RescueCaseStatus, Vet } from '../core/types';
 import { useApp } from '../state/AppProvider';
 import {
   canClaimRescueCase,
@@ -11,9 +11,14 @@ import {
   rescueCaseStatusNames,
   timeAgo,
 } from '../core/domain';
-import { Button, Card, Empty, Notice, textStyles as t } from '../ui/common';
+import { Button, Card, Chip, Empty, Notice, textStyles as t } from '../ui/common';
 import { C } from '../ui/theme';
-import { claimRescueCase, getRescueCase, updateRescueCaseStatus } from '../services/repository';
+import {
+  claimRescueCase,
+  getRescueCase,
+  getVets,
+  updateRescueCaseStatus,
+} from '../services/repository';
 export function RescueCaseScreen() {
   const {
       params: { id },
@@ -27,11 +32,20 @@ export function RescueCaseScreen() {
     [claiming, setClaiming] = useState(false),
     [claimError, setClaimError] = useState(''),
     [advancing, setAdvancing] = useState(false),
-    [advanceError, setAdvanceError] = useState('');
+    [advanceError, setAdvanceError] = useState(''),
+    [vets, setVets] = useState<Vet[]>([]),
+    [vetsError, setVetsError] = useState(false),
+    [selectedVetId, setSelectedVetId] = useState<string>();
   // Pressable's own disabled-while-loading prop is async (a state update),
   // so a fast double-tap can still queue a second onPress before it commits.
   // This ref blocks synchronously, same pattern as RecordScreen/RescueReportScreen.
   const busy = useRef(false);
+  const mine = !!app.viewer && rescueCase?.assigned_volunteer_id === app.viewer.id;
+  // Only the assigned volunteer, only while the case sits at en_route (i.e.
+  // the next step is at_vet), ever needs the vet picker — computed here
+  // (not after the loading/not-found returns below) so the hooks that key
+  // off it can run unconditionally on every render.
+  const showVetPicker = mine && rescueCase?.status === 'en_route';
   async function load() {
     setLoading(true);
     setLoadError(false);
@@ -48,6 +62,37 @@ export function RescueCaseScreen() {
       void load();
     }, [id]),
   );
+  // Vet assignment is optional (product decision) — a failed fetch here must
+  // never block the en_route->at_vet transition, so this is entirely
+  // separate from `load`'s own loading/error state.
+  useEffect(() => {
+    if (!showVetPicker || app.demo) {
+      setVets([]);
+      setVetsError(false);
+      return;
+    }
+    let cancelled = false;
+    getVets()
+      .then((rows) => {
+        if (!cancelled) {
+          setVets(rows);
+          setVetsError(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setVetsError(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [showVetPicker, app.demo]);
+  // Never leave a stale pick around: a different case, a status that moved
+  // past en_route (including this volunteer's own successful at_vet
+  // transition, via the load() that follows it), or losing "mine" status all
+  // clear the selection.
+  useEffect(() => {
+    if (!showVetPicker) setSelectedVetId(undefined);
+  }, [id, showVetPicker]);
   async function claim() {
     if (busy.current) return;
     busy.current = true;
@@ -65,13 +110,13 @@ export function RescueCaseScreen() {
       busy.current = false;
     }
   }
-  async function advance(next: RescueCaseStatus) {
+  async function advance(next: RescueCaseStatus, vetId?: string) {
     if (busy.current) return;
     busy.current = true;
     setAdvancing(true);
     setAdvanceError('');
     try {
-      await updateRescueCaseStatus(id, next);
+      await updateRescueCaseStatus(id, next, vetId);
       // Same rule as claim(): reload from the server instead of setting
       // rescueCase.status locally. On failure below, rescueCase is left
       // exactly as it was — only the error notice changes.
@@ -106,7 +151,6 @@ export function RescueCaseScreen() {
         />
       </ScrollView>
     );
-  const mine = !!app.viewer && rescueCase.assigned_volunteer_id === app.viewer.id;
   return (
     <ScrollView style={s.page} contentContainerStyle={s.content}>
       {rescueCase.photo_url ? (
@@ -122,6 +166,9 @@ export function RescueCaseScreen() {
       <Card style={{ gap: 8 }}>
         <Text style={s.label}>Durum</Text>
         <Text style={t.h2}>{rescueCaseStatusNames[rescueCase.status]}</Text>
+        {rescueCase.assigned_vet_name ? (
+          <Text style={t.body}>Veteriner: {rescueCase.assigned_vet_name}</Text>
+        ) : null}
       </Card>
       {canClaimRescueCase(rescueCase) ? (
         <>
@@ -136,13 +183,35 @@ export function RescueCaseScreen() {
         </>
       ) : mine && nextRescueCaseStatus[rescueCase.status] ? (
         <>
+          {showVetPicker ? (
+            <View style={{ gap: 10 }}>
+              <Text style={s.label}>Hangi veterinere gidiliyor? (isteğe bağlı)</Text>
+              {vetsError ? (
+                <Notice text="Veteriner listesi yüklenemedi. Veterinersiz de devam edebilirsin." />
+              ) : null}
+              {vets.length ? (
+                <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+                  {vets.map((vet) => (
+                    <Chip
+                      key={vet.id}
+                      label={[vet.name, vet.district || vet.city].filter(Boolean).join(' · ')}
+                      active={selectedVetId === vet.id}
+                      onPress={() =>
+                        setSelectedVetId((current) => (current === vet.id ? undefined : vet.id))
+                      }
+                    />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           {advanceError ? <Notice error text={advanceError} /> : null}
           <Button
             label={rescueCaseActionLabels[nextRescueCaseStatus[rescueCase.status]!]}
             icon="arrow-forward-circle-outline"
             loading={advancing}
             disabled={!app.viewer}
-            onPress={() => void advance(nextRescueCaseStatus[rescueCase.status]!)}
+            onPress={() => void advance(nextRescueCaseStatus[rescueCase.status]!, selectedVetId)}
           />
         </>
       ) : mine && rescueCase.status === 'resolved' ? (
