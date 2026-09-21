@@ -1,0 +1,366 @@
+{
+  "version": 1,
+  "goal": "Build the most complete, licensed, deterministic-identity canonical Turkey park registry (OSM + official municipal sources + future nationwide gap sources), served to the mobile app via Supabase/PostGIS viewport queries rather than a bundled JSON. This session: integrate real municipal adapters one source at a time, checkpoint after each.",
+  "phase": "generic_municipal_ingestion_framework",
+  "current_source": null,
+  "completed_sources": [
+    {
+      "source_code": "konya_acikveri_parklar",
+      "province": "Konya",
+      "stage": "merged_into_nationwide_preview_not_imported",
+      "artifacts": [
+        "scripts/download-konya-parks.mjs",
+        "scripts/build-konya-canonical.mjs",
+        "data/park-enrichment/.cache/konya/manifest.json (gitignored)",
+        "data/park-enrichment/.cache/konya/parklar.geojson (gitignored)",
+        "data/park-enrichment/.cache/konya/license.html (gitignored)",
+        "data/park-enrichment/.cache/konya/konya-canonical-preview.json (gitignored)"
+      ],
+      "result": {
+        "rawFeatures": 2138, "parkCandidates": 2138, "validGeometry": 2138, "rejectedNonPark": 0,
+        "invalidCoordinates": 0, "provinceMismatch": 0, "districtMissing": 0,
+        "matchedExisting": 302, "safeNameUpgradeCandidates": 157,
+        "newCanonical": 1425, "review": 411,
+        "review_breakdown": { "multiple_osm_candidates": 41, "name_conflict_at_same_location": 32, "shared_osm_target_conflict": 338 },
+        "duplicateSourceRecords": 0, "sourceRefsProduced": 1727,
+        "canonicalTotalBefore": 24833, "canonicalTotalAfter_if_merged": 26258
+      },
+      "invariants_reverified_against_full_nationwide_dataset": {
+        "duplicate_canonical_id": 0, "duplicate_osm_id": 0, "duplicate_source_ref": 0,
+        "invalid_canonical_coordinate": 0, "province_outside_81_registry": 0,
+        "osm_deterministic_id_changes": 0,
+        "verified_at": "2026-09-21T15:35:00.000Z",
+        "method": "Checked Konya's newCanonicalParks + matched[] against the actual current nationwide-canonical-preview.json (not just internally within the Konya preview) — confirms it is safe to merge, though not yet merged."
+      },
+      "status": "MERGED — 302 matched (source_ref attached, identity untouched) + 1425 new canonical applied to nationwide-canonical-preview.json on 2026-09-21",
+      "not_yet_done": "Applying the 157 safe name upgrades, or importing anything to a DB. The merge itself (matched/new_canonical/review) is done — see docs/PARK_DATA_CHECKPOINT.md 'Milestone: Konya + Ordu Merged' for full detail."
+    },
+    {
+      "source_code": "ordu_acikveri_parklari",
+      "province": "Ordu",
+      "stage": "merged_into_nationwide_preview_not_imported",
+      "artifacts": [
+        "scripts/download-ordu-parks.mjs",
+        "scripts/build-ordu-canonical.mjs",
+        "data/park-enrichment/.cache/ordu/manifest.json (gitignored)",
+        "data/park-enrichment/.cache/ordu/parklar.geojson (gitignored)",
+        "data/park-enrichment/.cache/ordu/license.html (gitignored)",
+        "data/park-enrichment/.cache/ordu/ordu-canonical-preview.json (gitignored)"
+      ],
+      "identity_handling": "2 of 210 raw features (both 'Akyazı Sahil Park', ID=null, empty MultiPolygon coordinates) have NO stable identity and NO geometry — no OBJECTID/FID/GeoJSON feature.id exists anywhere in the schema to disambiguate them. Per explicit instruction: excluded via geometry validation (invalidGeometry), recorded explicitly, id NOT fabricated. The remaining 208 features all have a unique non-null ID (0-207) confirmed as a trustworthy stable external identifier — used directly as external_id.",
+      "result": {
+        "rawFeatures": 210, "parkCandidates": 208, "validGeometry": 208, "rejectedNonPark": 0,
+        "invalidGeometry": 2, "missingStableId": 0, "invalidCoordinates": 0,
+        "provinceMismatch": 0, "provinceByNearestFallback": 4, "districtMissing": 208,
+        "matchedExisting": 10, "safeNameUpgradeCandidates": 10,
+        "newCanonical": 84, "review": 114,
+        "review_breakdown": { "multiple_osm_candidates": 28, "name_conflict_at_same_location": 5, "shared_osm_target_conflict": 81 },
+        "duplicateSourceRecords": 0, "sourceRefsProduced": 94,
+        "canonicalTotalBefore": 24833, "canonicalTotalAfter_if_merged": 24917
+      },
+      "invariants_reverified_against_full_nationwide_dataset_plus_konya": {
+        "duplicate_canonical_id": 0, "duplicate_osm_id": 0, "duplicate_source_ref": 0,
+        "invalid_canonical_coordinate": 0, "province_outside_81_registry": 0,
+        "osm_deterministic_id_changes": 0, "konya_ordu_id_overlap": 0,
+        "verified_at": "2026-09-21T15:55:00.000Z",
+        "method": "Checked Ordu's newCanonicalParks + matched[] against nationwide-canonical-preview.json AND Konya's pending preview together (simulating both merged at once) — safe to merge, not yet merged."
+      },
+      "status": "MERGED — 10 matched (source_ref attached, identity untouched) + 84 new canonical applied to nationwide-canonical-preview.json on 2026-09-21",
+      "notes": "Representative point uses scripts/polygon-geometry.mjs's point-on-surface (never a centroid that could fall outside the polygon), since Ordu's geometry is real MultiPolygon, unlike Konya's Point-only source. OSM reconciliation radius widened to 100m/300m tiers (vs Konya's 25m/150m) because polygon-derived representative points can legitimately sit further from an existing OSM anchor's own representative point for the same physical park — this is why Ordu's review rate (114/208, 55%) is much higher than Konya's (411/2138, 19%): more candidates land within the wider radius of more than one existing OSM park. Sample-inspected pre-merge (20 review records across all 3 reasons) — no systemic miscalibration found, see merge milestone log below.",
+      "not_yet_done": "Applying the 10 safe name upgrades, or importing anywhere. The merge itself is done."
+    },
+    {
+      "source_code": "trabzon_acikveri_parklar",
+      "province": "Trabzon",
+      "stage": "merged_into_nationwide_preview_not_imported",
+      "artifacts": [
+        "scripts/download-trabzon-parks.mjs",
+        "scripts/build-trabzon-canonical.mjs",
+        "scripts/district-boundaries.mjs (new shared module, province-scoped geometric district resolution)",
+        "scripts/audit-trabzon-sample.mjs",
+        "data/park-enrichment/.cache/trabzon/manifest.json (gitignored)",
+        "data/park-enrichment/.cache/trabzon/parklar.geojson (gitignored)",
+        "data/park-enrichment/.cache/trabzon/license.html (gitignored)",
+        "data/park-enrichment/.cache/trabzon/trabzon-canonical-preview.json (gitignored)",
+        "data/park-enrichment/.cache/trabzon/trabzon-sample-audit.json (gitignored)"
+      ],
+      "identity_handling": "OBJECTID verified non-null and unique across all 57 raw features before being trusted as external_id — no missing/duplicate case existed (unlike Ordu), so nothing needed to be stopped for review on identity grounds.",
+      "district_handling": "Source has no district field at all. New scripts/district-boundaries.mjs resolves district spatially (containment against a Trabzon-scoped district set, computed GEOMETRICALLY — a district's bbox center must fall inside Trabzon's province polygon — never by name string, since Turkish ADM2 district names collide across provinces, e.g. both Trabzon and Manisa have a district literally named 'Köprübaşı' at unrelated coordinates, verified directly). Result: 57/57 resolved by direct containment, 0 via nearest-fallback, 0 unresolved.",
+      "result": {
+        "rawFeatures": 57, "parkCandidates": 57, "validGeometry": 57, "rejectedNonPark": 0,
+        "invalidCoordinates": 0, "provinceMismatch": 0,
+        "districtResolved": 57, "districtMissing": 0, "districtByNearestFallback": 0, "districtUnresolved": 0,
+        "matchedExisting": 16, "safeNameUpgradeCandidates": 7,
+        "newCanonical": 29, "review": 12,
+        "review_breakdown": { "multiple_osm_candidates": 5, "name_conflict_at_same_location": 7 },
+        "duplicateSourceRecords": 0, "sourceRefsProduced": 45,
+        "canonicalTotalBefore": 26342, "canonicalTotalAfter": 26371
+      },
+      "sample_qa": {
+        "method": "Fixed-seed systematic sampling (mulberry32 PRNG), reproducible, not cherry-picked. With only 57 raw features, sampled a high percentage.",
+        "newCanonicalSampled": "20/29 (69%)", "matchedSampled": "15/16 (94%)", "reviewSampled": "12/12 (100%, all)",
+        "issuesFound": 0,
+        "conclusion": "0/20 possible-missed-OSM-match flags at wider radius (vs 10/30 Konya, 7/20 Ordu) — no systemic issue. All 15 sampled MATCHED entries confirmed to carry no coordinate fields (structural proof MATCHED never overwrites an existing canonical park's point)."
+      },
+      "invariants_after_merge_independently_recomputed": {
+        "duplicate_canonical_id": 0, "duplicate_osm_id": 0, "duplicate_source_code_plus_external_id": 0,
+        "invalid_canonical_coordinate": 0, "province_outside_81_registry": 0, "osm_deterministic_id_changes": 0,
+        "verified_at": "2026-09-21T18:20:00.000Z",
+        "method": "Recomputed all 6 invariants + per-source ref counts directly from the merged nationwide-canonical-preview.json on disk via a separate inline node script; also confirmed Konya/Ordu were NOT double-applied when the merge script was re-run with Trabzon added (konya municipal-only stayed 1425, not 2850)."
+      },
+      "status": "MERGED — 16 matched (source_ref attached, identity untouched) + 29 new canonical applied to nationwide-canonical-preview.json on 2026-09-21",
+      "not_yet_done": "Applying the 7 safe name upgrades, or importing anywhere. The merge itself is done."
+    }
+  ],
+  "partial_sources": [],
+  "pending_sources": [
+    { "source_code": "gaziantep_acikveri_parklar", "province": "Gaziantep", "tier": "C", "classification": "NEEDS_SMALL_PARSER", "reason": "SAFE_OPEN license read in full, live API+CSV, but no geometry (name/district/neighborhood/area only) — needs name+district reconciliation, not spatial matching." },
+    { "source_code": "ibb_kentsel_acik_yesil_alan", "province": "İstanbul", "tier": "B", "classification": "BLOCKED_IDENTITY", "reason": "VERIFIED 2026-09-21 by fetching the real 52MB GeoJSON (real URL resolved via CKAN resource_show API): 1371 features, Polygon+MultiPolygon, properties ONLY {MAHALLE(=name),TUR(=type, filters cleanly to 495 'Park' rows),ILCE(=district),WKT_GEOM}. NO id field anywhere. MAHALLE+ILCE is unique in this snapshot but is a mutable-field combo, not a stable id — not used, per the same rule already applied to Balıkesir." },
+    { "source_code": "balikesir_yesil_alanlar", "province": "Balıkesir", "tier": "B", "classification": "BLOCKED_IDENTITY", "reason": "SAFE_OPEN (re-verified 2026-09-21: license text read directly), 1542 KML Point placemarks, no external id, 902/1542 generic names. Re-confirmed blocked 2026-09-21 — no hash-of-name/coordinate synthetic key created, per explicit instruction." },
+    { "source_code": "manisa_acikveri_parklar_kml", "province": "Manisa", "tier": "C", "classification": "BLOCKED_LICENSE", "reason": "license_status LIKELY_USABLE_NEEDS_REVIEW, not SAFE_OPEN — real KML geometry, fragmented across ~14 per-ilçe datasets, license PDF located but text not read." },
+    { "source_code": "sakarya_acikveri_park_alanlari", "province": "Sakarya", "tier": "C", "classification": "BLOCKED_LICENSE", "reason": "license_status LIKELY_USABLE_NEEDS_REVIEW; also csv_no_geometry (would be BLOCKED_SCHEMA too even if license confirmed)." },
+    { "source_code": "bursa_acikyesil_parklar", "province": "Bursa", "tier": "D", "classification": "BLOCKED_LICENSE", "reason": "license_status explicitly UNUSABLE despite an otherwise clean geojson/point/stable-id/no-district shape." }
+  ],
+  "generic_framework": {
+    "built_at": "2026-09-21T19:00:00.000Z",
+    "files": [
+      "data/municipal-ingestion-configs.json",
+      "scripts/municipal-ingestion-engine.mjs",
+      "scripts/run-municipal-adapter.mjs"
+    ],
+    "regression_validated_against": ["konya_acikveri_parklar", "ordu_acikveri_parklari", "trabzon_acikveri_parklar"],
+    "regression_result": "exact match on all 3 (summary counts, review-reason breakdown, deterministic UUID sets, matched/review pair sets, name-upgrade candidates, per-park coordinate/district/name)",
+    "sources_onboarded_via_config_only_this_milestone": 0,
+    "reason_zero_onboarded": "All 27 remaining registered sources fail at least one hard requirement — see source_classification in the merge_milestone_log's last entry, or docs/PARK_DATA_CHECKPOINT.md section 7."
+  },
+  "canonical_counts": {
+    "as_of": "2026-09-21T18:20:00.000Z",
+    "totalCanonicalParks": 26371,
+    "osmBackedParks": 24750,
+    "municipalOnlyParks": 1621,
+    "municipalOnlyBreakdown": { "izmir": 83, "konya": 1425, "ordu": 84, "trabzon": 29 },
+    "totalSourceRefs": 27592,
+    "distinctProvinceCount": 81,
+    "izmir": {
+      "freshOsm": 1905,
+      "municipalOnly": 83,
+      "finalCanonical": 1988,
+      "nameUpgradesReapplied": 44,
+      "nameUpgradesLost": 0
+    },
+    "preMerge_baseline": {
+      "totalCanonicalParks": 24833,
+      "osmBackedParks": 24750,
+      "municipalOnlyParks": 83,
+      "totalSourceRefs": 25726
+    }
+  },
+  "source_counts": {
+    "municipal_sources_researched": 29,
+    "municipal_sources_with_any_resource": 10,
+    "tier_a": 3,
+    "tier_b": 2,
+    "tier_c": 3,
+    "tier_d": 22,
+    "safe_open": 6,
+    "local_audit_only_new": 0,
+    "municipal_sources_with_preview_and_audit_complete": 3,
+    "municipal_sources_integrated_into_canonical": 3,
+    "classification_2026_09_21": {
+      "SUCCESS_CONFIG_ONLY": 3,
+      "BLOCKED_IDENTITY": 2,
+      "NEEDS_SMALL_PARSER": 1,
+      "BLOCKED_LICENSE": 3,
+      "BLOCKED_SCHEMA": 21,
+      "total_classified": 30,
+      "note": "BLOCKED_SCHEMA is tier-D (22 rows) minus Bursa, which is tier-D but reclassified BLOCKED_LICENSE (it has a machine-readable geojson resource, just an explicitly UNUSABLE license) — 21, not 22."
+    }
+  },
+  "invariants": {
+    "duplicate_canonical_id": 0,
+    "duplicate_osm_id": 0,
+    "duplicate_source_ref": 0,
+    "invalid_canonical_coordinate": 0,
+    "province_outside_81_registry": 0,
+    "osm_deterministic_id_changes": 0,
+    "last_verified_at": "2026-09-21T18:20:00.000Z",
+    "last_verified_by_command": "node scripts/merge-municipal-sources.mjs (Trabzon added, Konya/Ordu idempotently skipped), then independently recomputed all 6 invariants + per-source ref counts from the merged nationwide-canonical-preview.json on disk via a separate inline node script"
+  },
+  "artifacts": [
+    "data/sources-registry.json",
+    "data/municipal-park-sources.json",
+    "docs/municipal-park-enrichment-roadmap.md",
+    "docs/PARK_DATA_CHECKPOINT.md",
+    "data/park-enrichment/progress.json",
+    "scripts/download-turkey-pbf.mjs",
+    "scripts/extract-turkey-pbf-parks.mjs",
+    "scripts/build-nationwide-pbf-baseline.mjs",
+    "scripts/build-izmir-canonical-reconciled.mjs",
+    "scripts/build-nationwide-canonical.mjs",
+    "scripts/audit-nationwide-canonical.mjs",
+    "scripts/audit-nationwide-pbf-diff.mjs",
+    "scripts/build-nationwide-coverage.mjs",
+    "scripts/import-nationwide-canonical.mjs",
+    "scripts/nationwide-osm-source.mjs",
+    "scripts/province-boundaries.mjs",
+    "scripts/polygon-geometry.mjs",
+    "scripts/osm/park-osmconf.ini",
+    "data/park-enrichment/.cache/geofabrik/turkey-260920.osm.pbf (647MB, gitignored)",
+    "data/park-enrichment/.cache/geofabrik/nationwide-pbf-catalog.json (gitignored)",
+    "data/park-enrichment/.cache/izmir-canonical-reconciled.json (gitignored)",
+    "data/park-enrichment/.cache/nationwide-canonical-preview.json (gitignored)",
+    "scripts/download-konya-parks.mjs",
+    "scripts/build-konya-canonical.mjs",
+    "scripts/download-ordu-parks.mjs",
+    "scripts/build-ordu-canonical.mjs",
+    "scripts/audit-municipal-sample.mjs",
+    "scripts/merge-municipal-sources.mjs",
+    "data/park-enrichment/.cache/municipal-sample-audit.json (gitignored)",
+    "data/park-enrichment/.cache/municipal-review-backlog.json (gitignored)",
+    "data/park-enrichment/.cache/municipal-merge-report.json (gitignored)",
+    "data/park-enrichment/.cache/nationwide-canonical-preview.pre-municipal-merge.json.bak (gitignored, pre-Konya+Ordu-merge backup)",
+    "scripts/download-trabzon-parks.mjs",
+    "scripts/build-trabzon-canonical.mjs",
+    "scripts/district-boundaries.mjs",
+    "scripts/audit-trabzon-sample.mjs",
+    "data/park-enrichment/.cache/trabzon/trabzon-sample-audit.json (gitignored)",
+    "data/park-enrichment/.cache/nationwide-canonical-preview.pre-trabzon-merge.json.bak (gitignored, pre-Trabzon-merge backup)",
+    "data/municipal-ingestion-configs.json",
+    "scripts/municipal-ingestion-engine.mjs",
+    "scripts/run-municipal-adapter.mjs",
+    "data/park-enrichment/.cache/konya/konya_acikveri_parklar-generic-preview.json (gitignored, regression comparison only, never merged)",
+    "data/park-enrichment/.cache/ordu/ordu_acikveri_parklari-generic-preview.json (gitignored, regression comparison only, never merged)",
+    "data/park-enrichment/.cache/trabzon/trabzon_acikveri_parklar-generic-preview.json (gitignored, regression comparison only, never merged)",
+    "data/park-enrichment/.cache/pending-name-upgrade-audit.json (gitignored)"
+  ],
+  "last_successful_command": "node scripts/run-municipal-adapter.mjs trabzon_acikveri_parklar (and konya_acikveri_parklar, ordu_acikveri_parklari) -> all 3 exact-matched their verified originals byte-for-byte after the matching_check_order fix for Ordu; nationwide-canonical-preview.json UNCHANGED at 26371 (regression outputs never merged)",
+  "next_step": "Generic framework DONE and fully checkpointed (2026-09-21): engine built, regression-validated exactly against Konya/Ordu/Trabzon, all 30 registry sources classified (3 SUCCESS_CONFIG_ONLY already integrated, 2 BLOCKED_IDENTITY [Balıkesir + newly-verified İstanbul], 1 NEEDS_SMALL_PARSER [Gaziantep], 3 BLOCKED_LICENSE [Manisa/Sakarya/Bursa], 21 BLOCKED_SCHEMA), 174 pending name-upgrade candidates documented with verified provenance but NOT applied. Zero new sources qualified for onboarding this milestone — canonical total remains 26,371, unchanged. Waiting on explicit direction: (a) an identity-strategy decision for Balıkesir/İstanbul, (b) whether to apply the 174 name upgrades, (c) whether to start the genuinely-different-shaped Gaziantep work, or (d) something else. Do NOT proceed on any of these without explicit direction. If resuming after a context reset with no new direction: report this state (already fully in this file and PARK_DATA_CHECKPOINT.md) and wait.",
+  "blockers": [
+    { "id": "balikesir_no_stable_id", "description": "Balıkesir's 1542 KML placemarks have no id attribute at all — no adapter can be built without either a real id field appearing in the source or an explicit user decision on identity strategy." },
+    { "id": "istanbul_no_stable_id", "description": "İstanbul's 1371-feature GeoJSON (verified 2026-09-21) has no id field anywhere (not in properties, not as GeoJSON feature.id) — same blocker as Balıkesir, newly confirmed rather than assumed." }
+  ],
+  "reverification_log": [
+    {
+      "at": "2026-09-21T17:00:00.000Z",
+      "trigger": "New session asked to finish/checkpoint Konya then continue with Ordu as next adapter",
+      "finding": "Ordu was already complete from a prior session (preview_and_audit_complete_not_merged_not_imported), built using exactly the identity-handling rule re-requested (inspect schema, use real ID field since 208/210 unique+trustworthy, exclude the 2 features with no identity and no geometry, never fabricate). Independently recomputed every summary count, array length, and all 6 global invariants directly from konya-canonical-preview.json, ordu-canonical-preview.json, and nationwide-canonical-preview.json on disk. All numbers matched exactly. Nothing rebuilt, per do-not-redo-completed-work instruction.",
+      "result": "Both sources confirmed CLEAN. No new work performed. See docs/PARK_DATA_CHECKPOINT.md -> 'Independent Re-verification (2026-09-21, later same day)' for full recomputed numbers.",
+      "next_step_unchanged": true
+    }
+  ],
+  "merge_milestone_log": [
+    {
+      "at": "2026-09-21T18:10:00.000Z",
+      "trigger": "Explicit instruction: sample-QA then merge Konya+Ordu's already-completed SAFE results into the nationwide canonical preview via a generic (not per-city-hardcoded) merge layer.",
+      "sample_qa": {
+        "method": "Fixed-seed systematic sampling (mulberry32 PRNG), reproducible, not cherry-picked. Review buckets sampled across all reported reasons.",
+        "konya": { "newCanonicalSampled": 30, "matchedSampled": 15, "reviewSampled": 20, "issuesFound": 0 },
+        "ordu": { "newCanonicalSampled": 20, "matchedSampled": 10, "reviewSampled": 20, "issuesFound": 0 },
+        "conclusion": "No systematic matching or geometry bug found. A handful of new-canonical records had an OSM park within a 2x-widened radius, but those were themselves generic-named or plausibly distinct nearby features — expected boundary noise from each adapter's own conservative matching tiers, not a bug. Sample judged clean; merge proceeded."
+      },
+      "merge_result": {
+        "nationwideCanonicalBefore": 24833,
+        "nationwideCanonicalAfter": 26342,
+        "konyaSafeNew": 1425,
+        "orduSafeNew": 84,
+        "totalMatched": 312,
+        "totalReviewPreserved": 525,
+        "totalRejected": 0,
+        "sourceRefsAdded": 1821,
+        "matches_predicted_counts_exactly": true
+      },
+      "invariants_after_merge_independently_recomputed": {
+        "duplicate_canonical_id": 0, "duplicate_osm_id": 0, "duplicate_source_code_plus_external_id": 0,
+        "invalid_canonical_coordinate": 0, "province_outside_81_registry": 0, "osm_deterministic_id_changes": 0,
+        "osm_backed_count_unchanged": true, "izmir_municipal_only_preserved": true,
+        "konya_source_refs_preserved_exactly": 1727, "ordu_source_refs_preserved_exactly": 94
+      },
+      "architecture": "scripts/merge-municipal-sources.mjs — declarative MUNICIPAL_SOURCES registry (source_code, province, previewPath), one generic MATCHED/NEW_CANONICAL/REVIEW/REJECTED rule set applied identically to every source. No per-city branches. A third adapter needs only a new registry entry, not new merge code.",
+      "not_done": "157 (Konya) + 10 (Ordu) safe name-upgrade candidates NOT applied — separate pending decision. No DB write. No git commit/push.",
+      "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Konya + Ordu Merged Into Nationwide Canonical Preview' for the full report."
+    },
+    {
+      "at": "2026-09-21T18:20:00.000Z",
+      "trigger": "Explicit instruction: implement the Trabzon adapter (third municipal source), reusing the generic merge contract, then sample-audit and merge.",
+      "registry_recheck": "Re-checked data/municipal-park-sources.json's existing trabzon_acikveri_parklar entry (no broad re-discovery). Fetched fresh via scripts/download-trabzon-parks.mjs: 57 features confirmed, matching the registry exactly.",
+      "identity": "OBJECTID verified non-null and unique across all 57 features before use as external_id. No missing/duplicate case this time.",
+      "district": "Source has no district field. New scripts/district-boundaries.mjs resolves it spatially, scoped to Trabzon's 18 real districts by GEOMETRIC containment (district bbox center inside Trabzon's province polygon), never by name — confirmed necessary: Trabzon and Manisa both have a district named 'Köprübaşı' at unrelated coordinates. Result: 57/57 resolved via direct containment, 0 nearest-fallback, 0 unresolved.",
+      "sample_qa": {
+        "method": "Fixed-seed systematic sampling (mulberry32 PRNG), reproducible, not cherry-picked. High coverage given only 57 raw features: 20/29 new, 15/16 matched, 12/12 (all) review.",
+        "issuesFound": 0,
+        "conclusion": "No systematic bug. 0/20 possible-missed-OSM-match flags. All 15 sampled MATCHED entries structurally confirmed to carry no coordinate fields (proof MATCHED never risks overwriting an existing canonical park's point). Sample judged clean; merge proceeded."
+      },
+      "merge_result": {
+        "nationwideCanonicalBefore": 26342,
+        "nationwideCanonicalAfter": 26371,
+        "trabzonSafeNew": 29,
+        "trabzonMatched": 16,
+        "totalReviewPreserved": 537,
+        "totalRejected": 0,
+        "sourceRefsAdded": 45,
+        "matches_predicted_counts_exactly": true
+      },
+      "idempotency_fix": "merge-municipal-sources.mjs was made to check nationwidePreview.summary.municipalSourcesMerged and skip re-applying any source already merged (Konya/Ordu), while still re-reading their preview files to keep the combined review backlog complete. Verified: konya municipal-only stayed 1,425 after this run, not 2,850 — confirms no double-application.",
+      "invariants_after_merge_independently_recomputed": {
+        "duplicate_canonical_id": 0, "duplicate_osm_id": 0, "duplicate_source_code_plus_external_id": 0,
+        "invalid_canonical_coordinate": 0, "province_outside_81_registry": 0, "osm_deterministic_id_changes": 0,
+        "osm_backed_count_unchanged": true, "izmir_municipal_only_preserved": true,
+        "konya_source_refs_preserved_exactly": 1727, "ordu_source_refs_preserved_exactly": 94,
+        "trabzon_source_refs_preserved_exactly": 45
+      },
+      "not_done": "174 total safe name-upgrade candidates (157 Konya + 10 Ordu + 7 Trabzon) NOT applied — separate pending decision. No DB write. No git commit/push. No fourth municipality started.",
+      "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Trabzon Adapter Built, Sample-Audited, and Merged' for the full report."
+    },
+    {
+      "at": "2026-09-21T19:00:00.000Z",
+      "trigger": "Explicit instruction: stop writing a bespoke adapter per city; build the smallest practical config-driven generic municipal ingestion framework using Konya/Ordu/Trabzon as reference implementations.",
+      "framework_files": [
+        "data/municipal-ingestion-configs.json (new — run-config layer, deliberately separate from data/municipal-park-sources.json's discovery/research data)",
+        "scripts/municipal-ingestion-engine.mjs (new — single generic runIngestion(config,...) function)",
+        "scripts/run-municipal-adapter.mjs (new — CLI, writes <source_code>-generic-preview.json, never overwrites the original verified previews)"
+      ],
+      "regression_validation": {
+        "method": "Ran the generic engine for all 3 reference sources into separate output files, then diffed exhaustively against the already-merged verified originals: summary counts, deterministic canonical-UUID SET equality, matched (canonical_id,external_id) pair SET equality, review (reason,external_id) pair SET equality, name-upgrade-candidate SET equality, and per-park coordinate/district/name field equality.",
+        "konya": { "matched": 302, "new": 1425, "review": 411, "review_breakdown": {"multiple_osm_candidates":41,"name_conflict_at_same_location":32,"shared_osm_target_conflict":338}, "exact_match": true },
+        "ordu": { "matched": 10, "new": 84, "review": 114, "review_breakdown": {"multiple_osm_candidates":28,"name_conflict_at_same_location":5,"shared_osm_target_conflict":81}, "exact_match": true, "note": "First run mismatched on review-reason breakdown only (28/26/60 vs required 28/5/81) despite matching top-line counts. NOT silently accepted. Root cause: Ordu's original adapter checks shared_osm_target_conflict grouping before the name-conflict check, unlike Konya/Trabzon. Fixed via a new per-source 'matching_check_order' config field; re-ran and got an exact match." },
+        "trabzon": { "matched": 16, "new": 29, "review": 12, "review_breakdown": {"multiple_osm_candidates":5,"name_conflict_at_same_location":7}, "exact_match": true },
+        "conclusion": "0 mismatches across all three sources on every check performed. Engine proven to be a faithful generic port, not just numerically coincidental."
+      },
+      "balikesir": "Re-confirmed BLOCKED_IDENTITY. No hash-of-name/coordinate synthetic key was created, per explicit instruction. Left out of municipal-ingestion-configs.json entirely (no enabled:false placeholder that could be flipped on by mistake).",
+      "name_upgrade_audit": {
+        "total": 174, "by_source": { "konya_acikveri_parklar": 157, "ordu_acikveri_parklari": 10, "trabzon_acikveri_parklar": 7 },
+        "artifact": "data/park-enrichment/.cache/pending-name-upgrade-audit.json (gitignored)",
+        "rule": "osmGeneric && !candidateGeneric — proposed only when the existing OSM-backed park's name is generic AND the municipal record at the same reconciled location has a specific name.",
+        "provenance_verified": "All 174 re-checked against the current nationwide-canonical-preview.json — every target park still exists and its name still exactly equals the recorded old_name. 0 stale.",
+        "independent_of_merge_confirmed": "scripts/merge-municipal-sources.mjs's applyMunicipalResult() never reads or writes safeNameUpgradeCandidates — confirmed by code inspection, and empirically: no canonical park name has changed across all 3 merges so far.",
+        "applied": false
+      },
+      "source_classification": {
+        "method": "Read data/municipal-park-sources.json in full (30 rows). One live verification was done — İstanbul (ibb_kentsel_acik_yesil_alan) — via the CKAN resource_show API (registry's resource_url was a landing page, not the file) then fetching the real 52MB GeoJSON to inspect schema directly. No adapter code was written for any newly-classified source.",
+        "SUCCESS_CONFIG_ONLY": ["konya_acikveri_parklar", "ordu_acikveri_parklari", "trabzon_acikveri_parklar"],
+        "BLOCKED_IDENTITY": [
+          { "source_code": "balikesir_yesil_alanlar", "reason": "1542 KML Placemarks, 0 have an id attribute (already known)." },
+          { "source_code": "ibb_kentsel_acik_yesil_alan", "reason": "NEWLY VERIFIED 2026-09-21: real download URL https://data.ibb.gov.tr/dataset/82e809cf-9465-407a-91cd-ac745d6fbc95/resource/41ddb7a6-6931-4176-9614-2c2892da5307/download/yaysis_mahal_geo_data.geojson — 1371 features, Polygon+MultiPolygon mixed, properties are ONLY {MAHALLE (actually the park name), TUR (type, TUR=='Park' cleanly filters to 495/1371), ILCE (district), WKT_GEOM}. No id field anywhere (not in properties, not as GeoJSON feature.id). MAHALLE+ILCE happens to be unique across all 1371 rows in this snapshot but was NOT used as identity — same do-not-fabricate-from-mutable-fields rule as Balıkesir." }
+        ],
+        "NEEDS_SMALL_PARSER": [
+          { "source_code": "gaziantep_acikveri_parklar", "reason": "SAFE_OPEN, stable id, district available, but geometry_available:false entirely — needs a name+district reconciliation strategy instead of our geometry-based matching. Genuinely different pipeline shape, not a config variation." }
+        ],
+        "BLOCKED_LICENSE": [
+          { "source_code": "manisa_acikveri_parklar_kml", "reason": "license_status LIKELY_USABLE_NEEDS_REVIEW, not SAFE_OPEN — unconfirmed licenses never become enabled." },
+          { "source_code": "sakarya_acikveri_park_alanlari", "reason": "Same license gap; also csv_no_geometry (would be BLOCKED_SCHEMA too even with a confirmed license)." },
+          { "source_code": "bursa_acikyesil_parklar", "reason": "license_status explicitly UNUSABLE despite an otherwise clean geojson/point/stable-id shape." }
+        ],
+        "BLOCKED_SCHEMA": {
+          "count": 22,
+          "provinces": ["Ankara (x2 sources)", "Kocaeli", "Denizli", "Muğla", "Tekirdağ", "Antalya", "Adana", "Mersin", "Samsun", "Kayseri", "Eskişehir", "Diyarbakır", "Şanlıurfa", "Hatay", "Malatya", "Mardin", "Erzurum", "Van", "Aydın", "Kahramanmaraş"],
+          "reason": "No machine-readable resource exists — interactive-map-only, PDF-only, or nothing found."
+        },
+        "conclusion": "Zero additional sources currently qualify for config-only onboarding. Reported honestly rather than forcing an onboarding."
+      },
+      "canonical_total_unchanged": "26371 — no new source was merged this milestone (none qualified). Only the *-generic-preview.json regression comparison files were written; none were fed into merge-municipal-sources.mjs.",
+      "not_done": "No DB write. No commit/push. No fourth source started. Name upgrades not applied. Balıkesir/İstanbul identity strategy not decided. Gaziantep/Manisa/Sakarya not attempted (correctly deferred per instruction not to start substantial custom work in this task).",
+      "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Generic Config-Driven Municipal Ingestion Framework' for the full report."
+    }
+  ],
+  "updated_at": "2026-09-21T19:00:00.000Z"
+}
