@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "sources": [
+    {
+      "source_code": "osm",
+      "source_name": "OpenStreetMap contributors",
+      "source_url": "https://www.openstreetmap.org/copyright",
+      "license": "ODbL-1.0",
+      "attribution": "© OpenStreetMap contributors",
+      "coverage": "nationwide",
+      "external_id_format": "{osm_type}/{osm_id}, e.g. node/1662862545",
+      "redistribution": "allowed_with_attribution",
+      "notes": "Nationwide leisure=park baseline pulled via Overpass API. See scripts/import-parks.mjs and scripts/build-catalog.mjs."
+    },
+    {
+      "source_code": "izmir_kent_rehberi",
+      "source_name": "İzmir Büyükşehir Belediyesi Kent Rehberi",
+      "source_url": "https://kentrehberi.izmir.bel.tr/izmirkentrehberi",
+      "license": "unknown",
+      "attribution": "İzmir Büyükşehir Belediyesi",
+      "coverage": "İzmir",
+      "external_id_format": "ArcGIS OBJECTID (MapServer layer 263, filter TIP=1)",
+      "redistribution": "unknown_do_not_redistribute_raw",
+      "notes": "ArcGIS snapshot cached locally only (data/park-enrichment/.cache, gitignored). Reuse/license terms for this ArcGIS layer were never confirmed with the source, so it is never committed to git and must not be treated as clear for production redistribution. See scripts/download-izmir-official-parks.mjs."
+    },
+    {
+      "source_code": "izmir_acikveri_north_south",
+      "source_name": "İzmir Büyükşehir Belediyesi Açık Veri (Kuzey/Güney park listeleri)",
+      "source_url": "https://acikveri.bizizmir.com/tr/dataset/kuzey-guney-alani-park-sayilari",
+      "license": "CC BY 4.0",
+      "attribution": "İzmir Büyükşehir Belediyesi",
+      "coverage": "İzmir",
+      "external_id_format": "n/a — address-label enrichment merge only, never a canonical park_source_refs row",
+      "redistribution": "allowed_with_attribution",
+      "notes": "Used only to fill address_label in mobile/src/core/park-details.json; does not establish canonical park identity or provenance."
+    },
+    {
+      "source_code": "kadikoy_belediyesi",
+      "source_name": "Kadıköy Belediyesi Park ve Bahçeler Müdürlüğü",
+      "source_url": "https://acikveri.kadikoy.bel.tr/dataset/kadikoy-yesil-alan",
+      "license": "CC BY 4.0",
+      "attribution": "Kadıköy Belediyesi",
+      "coverage": "İstanbul / Kadıköy",
+      "external_id_format": "n/a — name/address enrichment merge only, never a canonical park_source_refs row",
+      "redistribution": "allowed_with_attribution",
+      "notes": "Used only to fill name/address_label in mobile/src/core/park-details.json; does not establish canonical park identity or provenance."
+    }
+  ]
+}
