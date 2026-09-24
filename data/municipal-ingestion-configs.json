@@ -18,14 +18,19 @@
       "id_field": "POI_ID",
       "name_field": "POI_ADI",
       "taxonomy_field": "ALT_NITELIK_ADI",
-      "allowed_taxonomy_values": ["PARK"],
+      "allowed_taxonomy_values": [
+        "PARK"
+      ],
       "geometry_type": "Point",
       "district_field": "ILCEADI",
       "district_field_casing": "turkish_title_case_from_upper",
       "district_resolution": "source_field",
       "external_id_url_param": "poi",
       "id_namespace": "patika-konya-acikveri",
-      "osm_match_tiers_m": [25, 150],
+      "osm_match_tiers_m": [
+        25,
+        150
+      ],
       "province_nearest_fallback_max_m": 2000,
       "tls_insecure_workaround": true,
       "notes": "Reference config #1 — reproduces scripts/build-konya-canonical.mjs. Verified 2026-09-21 to produce identical matched/new/review counts (302/1425/411) and identical deterministic canonical ids."
@@ -55,7 +60,10 @@
       "external_id_url_param": "id",
       "id_namespace": "patika-ordu-acikveri",
       "matching_check_order": "grouping_before_name_conflict",
-      "osm_match_tiers_m": [100, 300],
+      "osm_match_tiers_m": [
+        100,
+        300
+      ],
       "province_nearest_fallback_max_m": 2000,
       "tls_insecure_workaround": true,
       "notes": "Reference config #2 — reproduces scripts/build-ordu-canonical.mjs, including its deliberate district_resolution:'none' (the original adapter never attempted spatial district resolution, unlike Trabzon — preserved exactly here rather than silently upgrading it, per 'preserve currently verified output exactly'). Verified 2026-09-21 to produce identical matched/new/review counts (10/84/114) and identical deterministic canonical ids. Note: 2 of 210 raw features have ID=null AND empty geometry — handled generically by the engine's per-feature soft validation (excluded, recorded, never fabricated), same outcome as the original bespoke script."
@@ -84,10 +92,77 @@
       "district_resolution": "spatial",
       "external_id_url_param": "objectid",
       "id_namespace": "patika-trabzon-acikveri",
-      "osm_match_tiers_m": [25, 150],
+      "osm_match_tiers_m": [
+        25,
+        150
+      ],
       "province_nearest_fallback_max_m": 2000,
       "tls_insecure_workaround": true,
       "notes": "Reference config #3 — reproduces scripts/build-trabzon-canonical.mjs, including district_resolution:'spatial' (the original adapter DID resolve district via scripts/district-boundaries.mjs, unlike Ordu). dataset_url intentionally set equal to endpoint here to match the original script's exact source_url strings (a minor historical inconsistency vs Konya/Ordu's use of a separate human-readable dataset page — harmless, preserved rather than silently 'fixed' during genericization). Verified 2026-09-21 to produce identical matched/new/review counts (16/29/12) and identical deterministic canonical ids."
+    },
+    {
+      "source_code": "kayseri_kocasinan_park_ve_bahceler",
+      "province": "Kayseri",
+      "enabled": true,
+      "format": "kml",
+      "endpoint": "https://ulasav.csb.gov.tr/dataset/4d3e28c1-b7e0-471f-8a16-ff44da9f7d70/resource/bf8190dd-2b18-406d-9ea0-b57600a39cdb/download/park_alanlari.kml",
+      "dataset_url": "https://ulasav.csb.gov.tr/dataset/4d3e28c1-b7e0-471f-8a16-ff44da9f7d70",
+      "license_url": "http://ulasav.csb.gov.tr/license",
+      "license_status": "SAFE_OPEN",
+      "attribution": "Kayseri Kocasinan Belediyesi",
+      "source_display_name": "Kocasinan Belediyesi (ULASAV)",
+      "cache_dir": "kayseri",
+      "raw_filename": "parks.geojson",
+      "id_field": "rel_item_id",
+      "name_field": "park_adi",
+      "external_id_url_param": "rel_item_id",
+      "id_namespace": "patika-kayseri-kocasinan-ulasav",
+      "taxonomy_field": null,
+      "allowed_taxonomy_values": null,
+      "taxonomy_rule": "name_contains_park_word",
+      "geometry_type": "Polygon",
+      "district_field": null,
+      "district_field_casing": null,
+      "district_resolution": "spatial",
+      "osm_match_tiers_m": [
+        100,
+        300
+      ],
+      "province_nearest_fallback_max_m": 2000,
+      "notes": "ULASAV Kocasinan 'Park ve Bahçeler' KML (Polygon, WGS84). PARK = park_adi contains park word (131/242). Polygon -> point-on-surface, so polygon tier radii (100/300m) as for Ordu. District resolved spatially (source has no district field).",
+      "new_duplicate_guard_m": 100
+    },
+    {
+      "source_code": "van_buyuksehir_parklar",
+      "province": "Van",
+      "enabled": true,
+      "format": "shp_zip",
+      "endpoint": "https://ulasav.csb.gov.tr/dataset/2769db3e-a0e5-4f09-b0fa-90ce20abcb81/resource/7a727e37-70ea-435c-96bb-0d8f6ca0c27e/download/parklar.zip",
+      "dataset_url": "https://ulasav.csb.gov.tr/dataset/2769db3e-a0e5-4f09-b0fa-90ce20abcb81",
+      "license_url": "http://ulasav.csb.gov.tr/license",
+      "license_status": "SAFE_OPEN",
+      "attribution": "Van Büyükşehir Belediyesi",
+      "source_display_name": "Van Büyükşehir Belediyesi (ULASAV)",
+      "cache_dir": "van",
+      "raw_filename": "parks.geojson",
+      "id_field": "OBJECTID",
+      "name_field": "ADI",
+      "external_id_url_param": "objectid",
+      "id_namespace": "patika-van-ulasav",
+      "taxonomy_field": null,
+      "allowed_taxonomy_values": null,
+      "taxonomy_rule": "name_contains_park_word",
+      "geometry_type": "Point",
+      "district_field": null,
+      "district_field_casing": null,
+      "district_resolution": "spatial",
+      "osm_match_tiers_m": [
+        25,
+        150
+      ],
+      "province_nearest_fallback_max_m": 2000,
+      "notes": "ULASAV Van 'Parklar' SHP (Point, ITRF96_TM42 -> EPSG:4326 via ogr2ogr, done in download-ulasav-source.mjs). PARK = ADI contains park word (102/124). District spatial (ILCE_ID is an unresolved numeric code).",
+      "new_duplicate_guard_m": 100
     }
   ]
 }

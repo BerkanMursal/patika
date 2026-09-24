@@ -52,7 +52,8 @@ const MUNICIPAL_SOURCES = [
   {
     sourceCode: "konya_acikveri_parklar",
     province: "Konya",
-    previewPath: new URL("konya/konya-canonical-preview.json", cacheRoot)
+    // Corrected via the current generic engine (extended-radius review guard): 13573/13643 moved NEW -> REVIEW.
+    previewPath: new URL("konya/konya_acikveri_parklar-generic-preview.json", cacheRoot)
   },
   {
     sourceCode: "ordu_acikveri_parklari",
@@ -63,6 +64,16 @@ const MUNICIPAL_SOURCES = [
     sourceCode: "trabzon_acikveri_parklar",
     province: "Trabzon",
     previewPath: new URL("trabzon/trabzon-canonical-preview.json", cacheRoot)
+  },
+  {
+    sourceCode: "kayseri_kocasinan_park_ve_bahceler",
+    province: "Kayseri",
+    previewPath: new URL("kayseri/kayseri_kocasinan_park_ve_bahceler-generic-preview.json", cacheRoot)
+  },
+  {
+    sourceCode: "van_buyuksehir_parklar",
+    province: "Van",
+    previewPath: new URL("van/van_buyuksehir_parklar-generic-preview.json", cacheRoot)
   }
 ];
 
@@ -236,7 +247,8 @@ function enrichReviewRecord(entry, sourceCode, province, parkById) {
     longitude: candidateCoord.longitude ?? null,
     review_reason: entry.reason,
     osm_candidates: osmCandidates,
-    other_candidates_targeting_same_park: entry.other_candidates_targeting_same_park ?? undefined
+    other_candidates_targeting_same_park: entry.other_candidates_targeting_same_park ?? undefined,
+    extended_radius_evidence: entry.extended_radius_evidence ?? undefined
   };
 }
 
