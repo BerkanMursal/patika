@@ -121,9 +121,18 @@ function guessIdField(features) {
   // both look like valid unique ids) — genuinely can't pick deterministically.
   const best = scored[0];
   const tied = scored.filter(s => s.distinctCount === best.distinctCount && s.nonNullCount === best.nonNullCount);
-  const ambiguous = tied.length > 1 && best.distinctCount === best.nonNullCount && best.nonNullCount > 0;
+  let ambiguous = tied.length > 1 && best.distinctCount === best.nonNullCount && best.nonNullCount > 0;
+  let chosen = best;
+  let tieBroken = false;
+  // A GeoJSON feature.id is often assigned by an exporter; a named source
+  // property is source-native. When exactly ONE named property ties with
+  // feature.id, prefer the property — two tied named properties stay ambiguous.
+  if (ambiguous) {
+    const props = tied.filter(t => t.field !== "(GeoJSON feature.id)");
+    if (props.length === 1 && tied.length === 2) { chosen = props[0]; ambiguous = false; tieBroken = true; }
+  }
 
-  return { field: best.field, nonNullCount: best.nonNullCount, distinctCount: best.distinctCount, total: best.total, ambiguous, tiedFields: ambiguous ? tied.map(t => t.field) : undefined };
+  return { field: chosen.field, nonNullCount: chosen.nonNullCount, distinctCount: chosen.distinctCount, total: chosen.total, ambiguous, tieBroken, tiedFields: ambiguous ? tied.map(t => t.field) : undefined };
 }
 
 // Minimum fraction of non-empty NAME field values that must literally
@@ -255,12 +264,36 @@ async function loadViaOgr2ogr(url, workDir, { isZip = false, format = "shp" } = 
   }
 
   const outPath = new URL("converted.geojson", workDir);
-  await execFileAsync("ogr2ogr", ["-f", "GeoJSON", "-t_srs", "EPSG:4326", outPath.pathname, sourcePath.pathname]);
-  const geojson = JSON.parse(await readFile(outPath, "utf8"));
-  return { features: geojson.features ?? [], sourceCrs, targetCrs: "EPSG:4326", reprojected: true };
+  let features;
+  try {
+    await execFileAsync("ogr2ogr", ["-f", "GeoJSON", "-t_srs", "EPSG:4326", outPath.pathname, sourcePath.pathname]);
+    const text = (await readFile(outPath, "utf8").catch(() => "")).trim();
+    // A source with zero layers/placemarks (e.g. an empty KML folder) yields an
+    // empty output file — that is an EMPTY source, not a download failure.
+    features = text ? (JSON.parse(text).features ?? []) : [];
+  } catch (singleLayerError) {
+    // Multi-layer sources (e.g. KML with several Folders) cannot be written to
+    // ONE GeoJSON file. Convert each layer separately and concatenate; the
+    // layer name is kept in __layer. Only reached when the single-file
+    // conversion failed, so previously-working datasets are unaffected.
+    const { stdout } = await execFileAsync("ogrinfo", ["-so", "-q", sourcePath.pathname]);
+    const layers = stdout.split("\n").map(l => l.match(/^\d+:\s+(.+?)(?:\s+\((?:3D )?(?:Point|Line String|Polygon|Multi Polygon|Multi Line String|Multi Point|Geometry Collection|Unknown \(any\)|None)\))?\s*$/)).filter(Boolean).map(m => m[1]);
+    if (layers.length === 0) throw singleLayerError;
+    features = [];
+    for (const [i, layer] of layers.entries()) {
+      const layerOut = new URL(`layer_${i}.geojson`, workDir);
+      await execFileAsync("ogr2ogr", ["-f", "GeoJSON", "-t_srs", "EPSG:4326", layerOut.pathname, sourcePath.pathname, layer]);
+      const lt = (await readFile(layerOut, "utf8").catch(() => "")).trim();
+      for (const f of lt ? (JSON.parse(lt).features ?? []) : []) {
+        f.properties = { ...(f.properties ?? {}), __layer: layer };
+        features.push(f);
+      }
+    }
+  }
+  return { features, sourceCrs, targetCrs: "EPSG:4326", reprojected: true };
 }
 
-async function loadCsvCoordinates(url) {
+async function loadCsvCoordinates(url, override = null) {
   const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(60000) });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const text = await response.text();
@@ -268,8 +301,11 @@ async function loadCsvCoordinates(url) {
   if (lines.length < 2) return { features: [], sourceCrs: "n/a (CSV)", targetCrs: "EPSG:4326", reprojected: false };
   const delimiter = lines[0].includes(";") && !lines[0].includes(",") ? ";" : ",";
   const header = lines[0].split(delimiter).map(h => h.trim().replace(/^"|"$/g, ""));
-  const latIdx = header.findIndex(h => /^(lat|enlem|latitude|y)$/i.test(h));
-  const lonIdx = header.findIndex(h => /^(lon|lng|boylam|longitude|x)$/i.test(h));
+  let latIdx = header.findIndex(h => /^(lat|enlem|latitude|y)$/i.test(h));
+  let lonIdx = header.findIndex(h => /^(lon|lng|boylam|longitude|x)$/i.test(h));
+  // Explicit, evidence-backed override only (data/ulasav-recovery-overrides.json):
+  // the column LABELS are swapped relative to the values. Never inferred here.
+  if (override?.csv_axis === "swapped_labels" && latIdx !== -1 && lonIdx !== -1) [latIdx, lonIdx] = [lonIdx, latIdx];
   if (latIdx === -1 || lonIdx === -1) return { features: [], sourceCrs: "n/a (no coord columns)", targetCrs: "EPSG:4326", reprojected: false };
 
   const features = [];
@@ -279,6 +315,9 @@ async function loadCsvCoordinates(url) {
     const lon = Number(cols[lonIdx]?.replace(",", "."));
     const properties = Object.fromEntries(header.map((h, i) => [h, cols[i]]));
     features.push({ type: "Feature", geometry: { type: "Point", coordinates: [lon, lat] }, properties });
+  }
+  if (override?.csv_axis === "swapped_labels") {
+    return { features, sourceCrs: "EPSG:4326 lat/lon with SWAPPED column labels (override with independent first-party evidence: " + override.evidence + ")", targetCrs: "EPSG:4326", reprojected: false, crsAssumed: false };
   }
   return { features, sourceCrs: "assumed EPSG:4326, UNVERIFIED (CSV carries no CRS metadata)", targetCrs: "EPSG:4326", reprojected: false, crsAssumed: true };
 }
@@ -290,6 +329,14 @@ function extractRepresentativePoint(feature) {
   if (geom.type === "Polygon") return geom.coordinates?.[0]?.[0] ?? null;
   if (geom.type === "MultiPolygon") return geom.coordinates?.[0]?.[0]?.[0] ?? null;
   if (geom.type === "LineString") return geom.coordinates?.[0] ?? null;
+  if (geom.type === "MultiLineString") return geom.coordinates?.[0]?.[0] ?? null;
+  if (geom.type === "MultiPoint") return geom.coordinates?.[0] ?? null;
+  if (geom.type === "GeometryCollection") {
+    for (const g of geom.geometries ?? []) {
+      const p = extractRepresentativePoint({ geometry: g });
+      if (p) return p;
+    }
+  }
   return null;
 }
 
@@ -337,7 +384,10 @@ export async function inspectDataset(candidate, ctx) {
   } else if (candidate.license_id === "ulasav-license") {
     licenseInfo = ULASAV_LICENSE_VERIFIED;
   } else if (/cc[\s-]?by/i.test(candidate.license_title ?? "") || /cc[\s-]?by/i.test(candidate.license_id ?? "")) {
-    licenseInfo = { license_status: "SAFE_OPEN", license_source: "license_title/id text pattern ('CC BY') — not individually page-verified", license_verified_at: null };
+    // ULASAV attaches a "<city>-cc-by" license id and an identical "CC BY 4.0"
+    // sentence to every harvested portal regardless of its real terms
+    // (proven for Manisa/Ordu/Balıkesir/Konya) — a label, never evidence.
+    licenseInfo = { license_status: "LICENSE_UNVERIFIED", license_source: "ULASAV '<city>-cc-by' label is boilerplate, not verified first-party terms", license_verified_at: null };
   } else {
     licenseInfo = { license_status: "LICENSE_UNVERIFIED", license_source: "no prior verification found, no known-open pattern matched", license_verified_at: null };
   }
@@ -365,7 +415,7 @@ export async function inspectDataset(candidate, ctx) {
     } else if (candidate.bucket === "KML") {
       loaded = await loadViaOgr2ogr(candidate.url, workDir, { isZip: /\.kmz($|\?)/i.test(candidate.url), format: "kml" });
     } else if (candidate.bucket === "CSV_COORDINATES") {
-      loaded = await loadCsvCoordinates(candidate.url);
+      loaded = await loadCsvCoordinates(candidate.url, ctx.overrides?.[candidate.resource_id] ?? null);
     } else {
       result.status = "UNSUPPORTED_FORMAT";
       result.block_reason = `bucket ${candidate.bucket} has no generic reader`;
@@ -406,9 +456,15 @@ export async function inspectDataset(candidate, ctx) {
       return result;
     }
 
-    const idInfo = guessIdField(loaded.features);
+    // Identity is judged over rows that can actually be ingested (valid
+    // geometry). Rows with no usable geometry can never become a park, so a
+    // null id on them must not poison an otherwise complete identity field
+    // (Ordu: the 2 null-ID rows also have empty geometry).
+    const idInfo = guessIdField(points.map(p => p.feature));
     result.stable_id_field = idInfo.field;
     result.stable_id_coverage = idInfo.field ? `${idInfo.nonNullCount}/${idInfo.total}` : "0/0";
+    result.stable_id_coverage_basis = "valid-geometry rows";
+    if (idInfo.tieBroken) result.stable_id_note = "tie between a named property and GeoJSON feature.id broken in favour of the named property";
     result.duplicate_id_count = idInfo.field ? idInfo.nonNullCount - idInfo.distinctCount : null;
 
     if (idInfo.ambiguous) {

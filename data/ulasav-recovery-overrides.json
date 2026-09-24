@@ -1,0 +1,8 @@
+{
+ "_note": "Per-resource evidence-backed input corrections for scripts/inspect-ulasav-full.mjs. An entry is allowed only with independent first-party evidence, never because points 'land in Turkey'.",
+ "f4ab0371-81f1-4c82-96df-e9f2d8989bd1": {
+  "label": "Konya Selçuklu Belediyesi Parklar CSV",
+  "csv_axis": "swapped_labels",
+  "evidence": "columns enlem/boylam hold lon/lat values (0/30 plausible as labelled, 30/30 swapped); 12 of 14 name-matched parks in Konya's first-party integrated dataset land within 150 m when swapped vs ~780 km as labelled (.cache/ulasav/recovery/selcuklu/axis-swap-evidence.json)"
+ }
+}

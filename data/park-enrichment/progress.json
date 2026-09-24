@@ -1,7 +1,7 @@
 {
   "version": 1,
   "goal": "Build the most complete, licensed, deterministic-identity canonical Turkey park registry (OSM + official municipal sources + future nationwide gap sources), served to the mobile app via Supabase/PostGIS viewport queries rather than a bundled JSON. This session: integrate real municipal adapters one source at a time, checkpoint after each.",
-  "phase": "manisa_license_resolution_done",
+  "phase": "blocked_source_recovery_done",
   "current_source": null,
   "completed_sources": [
     {
@@ -355,7 +355,7 @@
     "data/park-enrichment/.cache/ulasav/full-classification.json (gitignored, final result)"
   ],
   "last_successful_command": "node scripts/run-ulasav-full-classification.mjs (3rd run, after fixing zip-extraction and taxonomy-fallback bugs) -> 71/71 inspected: 3 READY_FOR_RECONCILIATION (Kayseri-Kocasinan, Van, Trabzon-already-integrated), 1 READY_AFTER_SMALL_PARSER (Bursa, known non-park data), 45 BLOCKED_IDENTITY, 14 BLOCKED_LICENSE, 2 BLOCKED_CRS, 1 BLOCKED_SCHEMA, 5 DOWNLOAD_FAILED. Van regression fixture passed exactly.",
-  "next_step": "Manisa licence review DONE, STOPPED: classification LIKELY_OPEN_NEEDS_CAUTION (not SAFE_OPEN); config stays BLOCKED_LICENSE. Missing: text of mbb-odl-1.0 / Kullanım Koşulları (URL 404), confirmation of district-municipality scope + pre-2026 uploads, optional written confirmation, archived license page (Wayback 429, unchecked). Canonical untouched 26,433 / 615. No commit/push.",
+  "next_step": "Recovery sweep DONE, STOPPED. 0 new READY sources. BLOCKED_CRS 2/2 root-caused (parser gap; axis-swapped CSV), DOWNLOAD_FAILED 5: 2 parser-recovered, 3 unrecoverable (dead domain, host down, empty KMZ). Inspector fixed (classifier false negatives x2, false-positive CC-BY pattern for 40 datasets). Uncommitted: scripts/inspect-ulasav-full.mjs, scripts/run-ulasav-full-classification.mjs, data/ulasav-recovery-overrides.json. Canonical 26,433 / backlog 615 untouched.",
   "blockers": [
     {
       "id": "balikesir_no_stable_id",
@@ -601,7 +601,7 @@
       "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Generic Config-Driven Municipal Ingestion Framework' for the full report."
     }
   ],
-  "updated_at": "2026-09-24T20:43:37.382203Z",
+  "updated_at": "2026-09-24T20:56:12.983682Z",
   "overture_gap_analysis": {
     "stage": "gap_analysis_complete_not_merged_not_imported",
     "release": "2026-08-19.0",
@@ -1178,6 +1178,27 @@
       "district municipalities are data owners vs BB-only regulation",
       "no license text / attribution terms"
     ],
+    "canonical_untouched": {
+      "total": 26433,
+      "backlog": 615
+    }
+  },
+  "blocked_source_recovery": {
+    "date": "2026-09-24",
+    "blocked_crs": {
+      "investigated": 2,
+      "recovered": 2,
+      "ready": 0
+    },
+    "download_failed": {
+      "investigated": 5,
+      "parser_recovered": 2,
+      "unrecoverable": 3
+    },
+    "classifier_false_negatives_corrected": 2,
+    "new_ready_sources": [],
+    "regression_output": ".cache/ulasav/recovery/full-classification-v3.json",
+    "status_changes": 44,
     "canonical_untouched": {
       "total": 26433,
       "backlog": 615

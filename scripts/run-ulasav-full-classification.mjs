@@ -12,7 +12,12 @@ import { inspectDataset } from "./inspect-ulasav-full.mjs";
 // re-downloads a dataset that already completed.
 
 const cacheRoot = new URL("../data/park-enrichment/.cache/ulasav/", import.meta.url);
-const outputPath = new URL("full-classification.json", cacheRoot);
+const argv = process.argv.slice(2);
+const argVal = n => argv.find(a => a.startsWith(`--${n}=`))?.slice(n.length + 3) ?? null;
+// Defaults reproduce the original behaviour exactly; --output/--only exist so a
+// re-run (recovery sweep) never overwrites full-classification.json.
+const outputPath = argVal("output") ? new URL(argVal("output"), `file://${process.cwd()}/`) : new URL("full-classification.json", cacheRoot);
+const onlyIds = argVal("only") ? new Set(argVal("only").split(",")) : null;
 
 const classified = JSON.parse(await readFile(new URL("classified-resources.json", cacheRoot), "utf8"));
 const catalog = JSON.parse(await readFile(new URL("catalog.json", cacheRoot), "utf8"));
@@ -63,7 +68,7 @@ try {
   // no prior output — starting fresh
 }
 const doneIds = new Set(existingResults.map(r => r.dataset_id));
-const remaining = allCandidates.filter(c => !doneIds.has(c.dataset_id));
+const remaining = allCandidates.filter(c => !doneIds.has(c.dataset_id) && (!onlyIds || onlyIds.has(c.dataset_id)));
 console.log(`Remaining to inspect: ${remaining.length}`);
 
 const provincesPath = new URL("../data/provinces.geojson", import.meta.url);
@@ -75,7 +80,9 @@ const licenseEvidence = await loadLicenseEvidence();
 const workRoot = new URL("work/", cacheRoot);
 await mkdir(workRoot, { recursive: true });
 
-const ctx = { provinceRegions, districtRegions, licenseEvidence, workRoot };
+let overrides = {};
+try { overrides = JSON.parse(await readFile(new URL("../data/ulasav-recovery-overrides.json", import.meta.url), "utf8")); } catch { /* none */ }
+const ctx = { provinceRegions, districtRegions, licenseEvidence, workRoot, overrides };
 
 // Same local CA-trust-store gap already documented for every acikveri.*
 // .bel.tr subdomain used throughout this project (Konya/Ordu/Trabzon/
