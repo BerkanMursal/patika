@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { clean, nameKey, distanceMeters } from "./park-enrichment.mjs";
+import { strongNameEvidence } from "./name-evidence.mjs";
 import { representativePoint } from "./polygon-geometry.mjs";
 import { loadProvinceRegions, provincesContaining, nearestProvince } from "./province-boundaries.mjs";
 import { loadDistrictRegions, districtsForProvince, districtsContaining, nearestDistrict } from "./district-boundaries.mjs";
@@ -51,6 +52,15 @@ function isGenericName(name) {
   return !key || key === nameKey("İsimsiz park") || key === nameKey("Yeşil Alan") || key === nameKey("Park");
 }
 
+// Unicode-aware Turkish "park" word test (JS \b is unreliable next to "ı").
+// Same rule as scripts/inspect-ulasav-full.mjs containsParkWord(). "Yeşil
+// alan", playgrounds, gardens, refuge etc. are never promoted to PARK.
+function containsParkWord(text) {
+  const normalized = clean(text).toLocaleLowerCase("tr");
+  if (!normalized) return false;
+  return /(?<![\p{L}\p{N}])park(lar)?[ıi]?(?![\p{L}\p{N}])/u.test(normalized);
+}
+
 const TURKEY_BBOX = { minLat: 35, maxLat: 43, minLon: 25, maxLon: 45 };
 
 function coordPlausible(lat, lon) {
@@ -96,6 +106,17 @@ function extractPoint(feature, geometryType) {
     const [longitude, latitude] = coords;
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
     return { latitude, longitude };
+  }
+
+  if (geometryType === "Polygon") {
+    // A single Polygon is a one-element MultiPolygon for point-on-surface.
+    if (!Array.isArray(coords) || coords.length === 0) return null;
+    try {
+      const point = representativePoint([coords]);
+      return { latitude: point.lat, longitude: point.lon };
+    } catch {
+      return null;
+    }
   }
 
   if (geometryType === "MultiPolygon") {
@@ -206,7 +227,19 @@ export async function runIngestion(config, { nationwidePreview, provincesPath, d
 
     seenIds.add(externalId);
 
-    if (config.taxonomy_field) {
+    if (config.taxonomy_rule === "name_contains_park_word") {
+      // Sources with no taxonomy column: the PARK evidence is the row's own
+      // name field literally containing the word park/parkı/parklar.
+      if (!containsParkWord(props[config.name_field])) {
+        rejectedNonPark.push({
+          external_id: externalId,
+          taxonomy_value: null,
+          rule: "name_contains_park_word",
+          name: props[config.name_field] ?? null
+        });
+        continue;
+      }
+    } else if (config.taxonomy_field) {
       const taxonomyValue = props[config.taxonomy_field];
       if (!config.allowed_taxonomy_values?.includes(taxonomyValue)) {
         rejectedNonPark.push({ external_id: externalId, taxonomy_value: taxonomyValue ?? null });
@@ -383,6 +416,87 @@ export async function runIngestion(config, { nationwidePreview, provincesPath, d
         proposed_name: candidate.name,
         evidence_external_id: candidate.external_id
       });
+    }
+  }
+
+  // Extended-radius REVIEW-ONLY guard. Normal matching (tiers above) is
+  // unchanged; a candidate that found nothing inside the primary radius is
+  // still checked against ANY canonical park of the same province within
+  // config.extended_review_radius_m (default 250 m). Strong identity evidence
+  // (exact normalized name, same distinctive core, or very high similarity;
+  // generic/weak names never qualify) sends it to REVIEW — never MATCHED.
+  // District must be compatible (equal, or unknown on either side).
+  const extendedRadius = config.extended_review_radius_m === undefined ? 250 : config.extended_review_radius_m;
+  if (extendedRadius) {
+    const provincePark = nationwidePreview.parks.filter(
+      p => p.city === config.province && !(p.source_refs ?? []).some(r => r.source_code === config.source_code)
+    );
+    for (let i = newCanonical.length - 1; i >= 0; i--) {
+      const candidate = newCanonical[i];
+      let best = null;
+      for (const canon of provincePark) {
+        const dist = distanceMeters(candidate, canon);
+        if (dist > extendedRadius) continue;
+        if (candidate.district && canon.district && nameKey(candidate.district) !== nameKey(canon.district)) continue;
+        const evidence = strongNameEvidence(candidate.name, canon.name);
+        if (!evidence) continue;
+        if (!best || dist < best.distance_m) best = { canon, evidence, distance_m: Math.round(dist * 10) / 10 };
+      }
+      if (best) {
+        review.push({
+          reason: "possible_match_outside_primary_radius",
+          candidate,
+          osm_candidate: { id: best.canon.id, osm_id: best.canon.osm_id, name: best.canon.name },
+          extended_radius_evidence: {
+            distance_m: best.distance_m,
+            primary_radius_m: tier2,
+            extended_radius_m: extendedRadius,
+            evidence_kind: best.evidence.kind,
+            name_similarity: best.evidence.similarity,
+            candidate_name_key: best.evidence.key_a,
+            canonical_name_key: best.evidence.key_b
+          }
+        });
+        newCanonical.splice(i, 1);
+      }
+    }
+  }
+
+  // Opt-in (config.new_duplicate_guard_m): two NEW candidates from the SAME
+  // source that sit within N metres of each other AND carry the same/nested
+  // specific name are probably duplicate rows of one physical park. Never
+  // create two canonical parks for that — send the whole cluster to REVIEW.
+  // Generic names ("park", "Yeşil Alan") are excluded: identical generic
+  // names are normal. Absent from the three original configs, so their output
+  // stays byte-identical.
+  if (config.new_duplicate_guard_m) {
+    const radius = config.new_duplicate_guard_m;
+    const flagged = new Map();
+    for (let i = 0; i < newCanonical.length; i++) {
+      for (let j = i + 1; j < newCanonical.length; j++) {
+        const a = newCanonical[i];
+        const b = newCanonical[j];
+        if (isGenericName(a.name) || isGenericName(b.name)) continue;
+        const ka = nameKey(a.name);
+        const kb = nameKey(b.name);
+        const nested = ka === kb || ka.includes(kb) || kb.includes(ka);
+        if (nested && distanceMeters(a, b) <= radius) {
+          if (!flagged.has(a)) flagged.set(a, new Set());
+          if (!flagged.has(b)) flagged.set(b, new Set());
+          flagged.get(a).add(b.external_id);
+          flagged.get(b).add(a.external_id);
+        }
+      }
+    }
+    for (const [candidate, others] of flagged) {
+      review.push({
+        reason: "possible_duplicate_within_source",
+        candidate,
+        other_candidates_targeting_same_park: [...others]
+      });
+    }
+    for (let i = newCanonical.length - 1; i >= 0; i--) {
+      if (flagged.has(newCanonical[i])) newCanonical.splice(i, 1);
     }
   }
 
