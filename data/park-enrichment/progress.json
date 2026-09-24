@@ -1,8 +1,8 @@
 {
   "version": 1,
   "goal": "Build the most complete, licensed, deterministic-identity canonical Turkey park registry (OSM + official municipal sources + future nationwide gap sources), served to the mobile app via Supabase/PostGIS viewport queries rather than a bundled JSON. This session: integrate real municipal adapters one source at a time, checkpoint after each.",
-  "phase": "konya_duplicate_correction_done_release_prep",
-  "current_source": "ulasav_ckan",
+  "phase": "manisa_license_resolution_done",
+  "current_source": null,
   "completed_sources": [
     {
       "source_code": "konya_acikveri_parklar",
@@ -355,7 +355,7 @@
     "data/park-enrichment/.cache/ulasav/full-classification.json (gitignored, final result)"
   ],
   "last_successful_command": "node scripts/run-ulasav-full-classification.mjs (3rd run, after fixing zip-extraction and taxonomy-fallback bugs) -> 71/71 inspected: 3 READY_FOR_RECONCILIATION (Kayseri-Kocasinan, Van, Trabzon-already-integrated), 1 READY_AFTER_SMALL_PARSER (Bursa, known non-park data), 45 BLOCKED_IDENTITY, 14 BLOCKED_LICENSE, 2 BLOCKED_CRS, 1 BLOCKED_SCHEMA, 5 DOWNLOAD_FAILED. Van regression fixture passed exactly.",
-  "next_step": "DONE, STOPPED. Konya corrected (13573, 13643 -> review). Final preview: 26,433 canonical, review backlog 615. Nothing committed/pushed/DB. Awaiting user commit decision using the proposed split in docs/PARK_DATA_CHECKPOINT.md.",
+  "next_step": "Manisa licence review DONE, STOPPED: classification LIKELY_OPEN_NEEDS_CAUTION (not SAFE_OPEN); config stays BLOCKED_LICENSE. Missing: text of mbb-odl-1.0 / Kullanım Koşulları (URL 404), confirmation of district-municipality scope + pre-2026 uploads, optional written confirmation, archived license page (Wayback 429, unchecked). Canonical untouched 26,433 / 615. No commit/push.",
   "blockers": [
     {
       "id": "balikesir_no_stable_id",
@@ -601,7 +601,7 @@
       "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Generic Config-Driven Municipal Ingestion Framework' for the full report."
     }
   ],
-  "updated_at": "2026-09-24T18:14:13.765721Z",
+  "updated_at": "2026-09-24T20:43:37.382203Z",
   "overture_gap_analysis": {
     "stage": "gap_analysis_complete_not_merged_not_imported",
     "release": "2026-08-19.0",
@@ -1082,5 +1082,105 @@
       "scripts/run-ulasav-full-classification.mjs",
       "scripts/ulasav-license-evidence.mjs"
     ]
+  },
+  "identity_investigation": {
+    "date": "2026-09-24",
+    "artifacts_dir": "data/park-enrichment/.cache/ulasav/identity-investigation/",
+    "classification_file": "identity-classification.json",
+    "counts": {
+      "IDENTITY_RECOVERED": 1,
+      "IDENTITY_RECOVERABLE_FROM_UPSTREAM": 0,
+      "RESOURCE_SCOPED_IDENTITY_POSSIBLE": 27,
+      "NEEDS_MANUAL_RESEARCH": 1,
+      "TRULY_NO_STABLE_ID": 16
+    },
+    "manisa": {
+      "resources": 34,
+      "features": 576,
+      "serial_key_candidates": 493,
+      "placeholder_names": 474,
+      "truly_identity_less": 43,
+      "undocumented_ids": 39,
+      "upstream_geo_resources": 83,
+      "harvested": 34,
+      "byte_identical_redownloads": "34/34",
+      "cross_resource_pairs_within_30m": 3
+    },
+    "key_findings": [
+      "ogr2ogr KML/LIBKML drivers drop Placemark@id",
+      "all upstream resources are url_type upload; no API backend",
+      "numeric KML names = companion list serials (validated by coordinates/area)",
+      "Manisa upstream license mbb-odl-1.0 isopen=false vs ULASAV manisa-cc-by (unresolved)"
+    ],
+    "canonical_untouched": {
+      "total": 26433,
+      "backlog": 615
+    }
+  },
+  "scoped_serial_policy": {
+    "date": "2026-09-24",
+    "default_scope": "RESOURCE",
+    "identity": "(source_code, package_uuid, resource_uuid, serial)",
+    "encoding": "package_uuid/resource_uuid/serial",
+    "files": [
+      "scripts/scoped-serial-identity.mjs",
+      "scripts/test-scoped-serial-identity.mjs",
+      "scripts/dryrun-scoped-serial-source.mjs",
+      "data/scoped-serial-sources.json"
+    ],
+    "manisa_dryrun": {
+      "resources": 34,
+      "features": 576,
+      "usable_serial_resources": 26,
+      "features_with_serial": 493,
+      "resource_scope_valid_resources": 25,
+      "features_covered": 491,
+      "features_without_valid_identity": 85,
+      "blocked_identity_resources": 9,
+      "blocked_license_resources": 25,
+      "companion_join_coverage": 0.998,
+      "orphan_table_rows": 52,
+      "duplicate_scoped_identities": 0,
+      "placeholder_names": 474,
+      "cross_resource_duplicate_candidates": 3,
+      "snapshot_A_vs_B": "493 UNCHANGED",
+      "package_scope": "trivially proven for 26 single-geo-resource packages; not adopted",
+      "canonical_onboarding_allowed": false
+    },
+    "blocked_unchanged": [
+      "Balıkesir",
+      "İBB",
+      "Uşak"
+    ],
+    "canonical_untouched": {
+      "total": 26433,
+      "backlog": 615
+    }
+  },
+  "manisa_license_resolution": {
+    "date": "2026-09-24",
+    "classification": "LIKELY_OPEN_NEEDS_CAUTION",
+    "config_status": "BLOCKED_LICENSE",
+    "mbb_odl_1_0": {
+      "family": "Custom",
+      "od_conformance": "not reviewed",
+      "license_url_status": 404
+    },
+    "isopen_false_reason": "CKAN od_conformance not reviewed on a custom licence (not evidence of restriction)",
+    "ulasav_manisa_cc_by": "ULASAV boilerplate: identical Lisans Detayı sentence on Ordu/Sivas/Balıkesir/Konya; no evidential weight",
+    "first_party_evidence": [
+      "Yönetmelik Art.4(c) open-data definition (PDF 2026-01-07)",
+      "SSS: data open, but see license + Kullanım Koşulları (missing)",
+      "Announcement 01.12.2025 (future tense, no conditions)"
+    ],
+    "scope_gaps": [
+      "datasets created 2025-05 predate regulation",
+      "district municipalities are data owners vs BB-only regulation",
+      "no license text / attribution terms"
+    ],
+    "canonical_untouched": {
+      "total": 26433,
+      "backlog": 615
+    }
   }
 }

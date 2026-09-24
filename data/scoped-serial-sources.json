@@ -1,0 +1,859 @@
+{
+ "_note": "Scoped-serial identity sources (policy: default serial_scope RESOURCE -> (source_code, package_uuid, resource_uuid, serial)). DRY-RUN config only; a source here is NOT enabled for canonical ingestion. Paths are relative to cache_dir under data/park-enrichment/.cache/.",
+ "sources": [
+  {
+   "source_code": "manisa_acikveri_serial_scoped",
+   "province": "Manisa",
+   "cache_dir": "ulasav/identity-investigation",
+   "enabled_for_canonical": false,
+   "license": {
+    "status": "BLOCKED_LICENSE",
+    "assessed_classification": "LIKELY_OPEN_NEEDS_CAUTION",
+    "verified_at": "2026-09-24",
+    "reason": "Strong first-party evidence of open reuse, but the dataset-specific license mbb-odl-1.0 has no retrievable text (its URL 404s), no Kullanım Koşulları page exists, and the district-municipality data scope is unconfirmed. Not SAFE_OPEN, so canonical onboarding stays blocked (policy check I unchanged).",
+    "mbb_odl_1_0": {
+     "family": "Custom",
+     "od_conformance": "not reviewed",
+     "ckan_isopen": false,
+     "license_url": "https://acikveri.manisa.bel.tr/lisans/mbb-odl-1-0",
+     "license_url_http_status": 404
+    },
+    "first_party_evidence": [
+     {
+      "url": "https://acikveri.manisa.bel.tr/dataset/cf7eaa92-e7f9-401d-b5b6-0b5f7fc0cb49/resource/99eefc68-68b0-4f88-bf47-698341367379/download/ack-veri-yonetmelik.pdf",
+      "what": "Açık Veri Platformu Yönetmeliği Art.4(c): Açık Veri = free, unrestricted, reusable and redistributable data not subject to copyright/patent/other restrictions; Art.2 scope = data belonging to Manisa Büyükşehir Belediyesi; effective on website publication (date not stated); PDF created 2026-01-07, uploaded 2026-01-14"
+     },
+     {
+      "url": "https://acikveri.manisa.bel.tr/sss",
+      "what": "FAQ: published data is open for use, but users must check the dataset license info and Kullanım Koşulları page first (neither retrievable)"
+     },
+     {
+      "url": "https://www.manisa.bel.tr/Haberler/45419_buyuksehir-vatandaslara-guvenli-veri-ulastiracak.aspx",
+      "what": "Official announcement dated 01.12.2025: portal data usable free of charge and freely, without copyright/patent/other control mechanisms (future tense, news copy, no license id/conditions)"
+     }
+    ],
+    "ulasav_comparison": "ULASAV manisa-cc-by / \"CC BY 4.0\" is ULASAV boilerplate: identical \"Lisans Detayı\" sentence (city name swapped) is attached to Ordu, Sivas, Balıkesir, Konya etc.; not read from Manisa metadata (which says mbb-odl-1.0). Not evidence of Manisa terms.",
+    "missing_evidence_for_safe_open": [
+     "Text of mbb-odl-1.0 (or a Kullanım Koşulları page) stating reuse + redistribution (incl. commercial) and any attribution condition",
+     "Confirmation that Manisa Büyükşehir can license datasets authored by district municipalities (Yunusemre, Şehzadeler, Soma, ...) and that the Jan-2026 regulation/portal terms cover datasets uploaded 2025-05",
+     "Optionally: written confirmation from iletisim@manisa.bel.tr / Çözüm Merkezi 153, or CKAN metadata moved to cc-by-4.0 / od_conformance approved",
+     "Archived copy of the license page (Wayback check rate-limited 429, not completed)"
+    ]
+   },
+   "serial_scope": "RESOURCE",
+   "thresholds": {
+    "min_serial_coverage": 1.0,
+    "min_join_coverage": 0.95,
+    "close_m": 30,
+    "strong_name_m": 150
+   },
+   "resources": [
+    {
+     "key": "02",
+     "title": "Park ve Yeşil Alanlar",
+     "package_title": "Park ve Yeşil Alanlar",
+     "package_uuid": "76f80952-9ee0-47ae-8092-4f36e46cfe3e",
+     "resource_uuid": "09e46371-273a-4ef4-be36-b7f34c3ad892",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/76f80952-9ee0-47ae-8092-4f36e46cfe3e/resource/09e46371-273a-4ef4-be36-b7f34c3ad892/download/sehzadeler.kml",
+     "geo_file": "02.geojson",
+     "upstream_geo_resource_uuids": [
+      "09e46371-273a-4ef4-be36-b7f34c3ad892"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^(\\d+)$"
+     },
+     "companion": {
+      "type": "csv_column",
+      "path": "attach/out/02_397d9bc0.csv",
+      "column": 1,
+      "note": "Sıra No"
+     }
+    },
+    {
+     "key": "06",
+     "title": "Park, Yeşil Alan ve Mesire Yerleri",
+     "package_title": "Park, Yeşil Alan ve Mesire Yerleri",
+     "package_uuid": "334e8944-65e4-4685-9ce1-ed2330c9fc36",
+     "resource_uuid": "e2de2aa5-1e15-43a1-b6d4-ce5b2e1e5484",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/334e8944-65e4-4685-9ce1-ed2330c9fc36/resource/e2de2aa5-1e15-43a1-b6d4-ce5b2e1e5484/download/aksu-piknik-alani.kml",
+     "geo_file": "06.geojson",
+     "upstream_geo_resource_uuids": [
+      "e2de2aa5-1e15-43a1-b6d4-ce5b2e1e5484",
+      "683ffdd2-7d88-468d-9781-1dcc3bcd66af",
+      "7eb29f79-727f-427f-85be-cb8816db1c27",
+      "0ee88ff9-ba65-4762-b272-ad06018492cc",
+      "2f537266-889e-4730-973c-e5aa0358717f",
+      "36184800-cb33-4d15-ac0b-e527961c1072"
+     ],
+     "serial_rule": {
+      "type": "none",
+      "reason": "single-feature upload; id is trivial; package has 6 single-park KMLs"
+     },
+     "companion": null
+    },
+    {
+     "key": "08",
+     "title": "Park, Çocuk Oyun Parkları ve Yeşil Alanlar",
+     "package_title": "Park, Çocuk Oyun Parkları ve Yeşil Alanlar",
+     "package_uuid": "7fe267d1-73a2-4e8d-9d0e-1c947e227823",
+     "resource_uuid": "530be575-1e50-492b-8301-c36624ced444",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/7fe267d1-73a2-4e8d-9d0e-1c947e227823/resource/530be575-1e50-492b-8301-c36624ced444/download/soma-parklar.kml",
+     "geo_file": "08.geojson",
+     "upstream_geo_resource_uuids": [
+      "530be575-1e50-492b-8301-c36624ced444"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^(\\d+)$"
+     },
+     "companion": {
+      "type": "csv_column",
+      "path": "attach/out/08_8e81bb92.csv",
+      "column": 0,
+      "note": "Number"
+     }
+    },
+    {
+     "key": "11",
+     "title": "Parklar ve Yeşil Alanlar",
+     "package_title": "Parklar ve Yeşil Alanlar",
+     "package_uuid": "8206c614-47b2-49b9-b14b-06750068854e",
+     "resource_uuid": "d67ac8b3-589c-4ca0-8da2-2dc8de3e7e90",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/8206c614-47b2-49b9-b14b-06750068854e/resource/d67ac8b3-589c-4ca0-8da2-2dc8de3e7e90/download/15-temmuz-ehitler-parki.kml",
+     "geo_file": "11.geojson",
+     "upstream_geo_resource_uuids": [
+      "d67ac8b3-589c-4ca0-8da2-2dc8de3e7e90",
+      "621c676c-40a7-49ba-a6ca-f30272513019",
+      "9772113e-fb91-4116-895b-3bbef32acc8c",
+      "9610020d-ce59-4c81-b8b9-6d6db127c0ab",
+      "99151966-f52a-43c6-81f6-672b4196c1de",
+      "46e2af4a-56fe-4b23-a284-5b3ba166d751",
+      "ccd8cfd2-5631-469d-bfce-01ba66ebdcf7",
+      "cfa1eb45-f32a-424a-9876-be10fa9b0be2",
+      "ccc133ed-7e92-4922-9a2c-fb22558d4dbc",
+      "4f1cca7b-de22-47a7-b384-24177acd4748",
+      "83547058-4c99-48d7-bf78-3bd0aa00d969",
+      "fadc6218-64b0-41ce-bdd4-773f5bce3b8d",
+      "722d05f7-f03d-450d-8196-7a274b3c24e5",
+      "97414260-c593-49f8-a506-152110ce7073",
+      "6d42daae-1260-4fbb-af5e-6bb0500b3c35",
+      "36e4878e-616c-49a6-925d-f2a00e498175",
+      "5482b932-c45d-45ff-93e5-41ff2fa8b939",
+      "7e47a971-c26b-4620-8db7-ec2fb2d1ce97",
+      "d7bc7b3f-4813-4d36-9d5b-74b9210d2447"
+     ],
+     "serial_rule": {
+      "type": "none",
+      "reason": "single-park upload; no id of any kind; package holds many sibling single-park KML uploads ULASAV did not harvest"
+     },
+     "companion": null
+    },
+    {
+     "key": "13",
+     "title": "Parklar ve Yeşil Alanlar",
+     "package_title": "Parklar ve Yeşil Alanlar",
+     "package_uuid": "2261c5c2-9601-4060-974b-d9bb1ae0c770",
+     "resource_uuid": "11b317c7-cc67-4f27-9958-f3ce55625e8c",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/2261c5c2-9601-4060-974b-d9bb1ae0c770/resource/11b317c7-cc67-4f27-9958-f3ce55625e8c/download/park.kml",
+     "geo_file": "13.geojson",
+     "upstream_geo_resource_uuids": [
+      "11b317c7-cc67-4f27-9958-f3ce55625e8c",
+      "7a220bee-9edc-48f9-b74d-700d60d0c791",
+      "7b5506af-ea74-4fc2-832a-6090fb746102",
+      "eeaa1417-a636-4c3d-a7f1-7e2a611167c4",
+      "8d25e456-646c-40d3-80f4-d8945e428c0e",
+      "5704582d-4e57-42e1-a2f3-0efb47371146",
+      "a4674d72-8afd-415f-b0eb-f2b6c8280061",
+      "c10984a0-905f-4d70-beb2-ffb890a90ec0",
+      "ca9b6da1-ce46-4183-bfe8-7893f73fdb9e",
+      "98ea329a-9546-4a83-910c-d36ee78130ee",
+      "e61e7c14-1b03-4ae4-a920-ea0914847681",
+      "f19bba9b-6e8c-46e3-9134-648fafc5a276"
+     ],
+     "serial_rule": {
+      "type": "none",
+      "reason": "single-park upload; no id of any kind; package holds many sibling single-park KML uploads ULASAV did not harvest"
+     },
+     "companion": null
+    },
+    {
+     "key": "14",
+     "title": "Parklar ve Yeşil Alanlar",
+     "package_title": "Parklar ve Yeşil Alanlar",
+     "package_uuid": "d0e41634-da66-4313-a2ae-d79f2ed8aa2b",
+     "resource_uuid": "af43abcb-692d-47da-8558-3bb7dd10f965",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/d0e41634-da66-4313-a2ae-d79f2ed8aa2b/resource/af43abcb-692d-47da-8558-3bb7dd10f965/download/salihlipark.kmz",
+     "geo_file": "14.geojson",
+     "upstream_geo_resource_uuids": [
+      "af43abcb-692d-47da-8558-3bb7dd10f965"
+     ],
+     "serial_rule": {
+      "type": "none",
+      "reason": "39/39 unique authored ids, semantics/stability undocumented, no companion key table (RTF is prose by park name)"
+     },
+     "companion": null
+    },
+    {
+     "key": "15",
+     "title": "Gölmarmara Parklar",
+     "package_title": "Gölmarmara Parklar",
+     "package_uuid": "ba00789e-1db0-424d-9863-2a17cfe8cba2",
+     "resource_uuid": "a729d906-a6fa-4289-afe6-ae320569a1fd",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/ba00789e-1db0-424d-9863-2a17cfe8cba2/resource/a729d906-a6fa-4289-afe6-ae320569a1fd/download/ilce.kmz",
+     "geo_file": "15.geojson",
+     "upstream_geo_resource_uuids": [
+      "a729d906-a6fa-4289-afe6-ae320569a1fd"
+     ],
+     "serial_rule": {
+      "type": "none",
+      "reason": "26 features, names only (24 non-park-word); companion XLSX is a cadastral list of non-park facilities"
+     },
+     "companion": null
+    },
+    {
+     "key": "16",
+     "title": "Parklar ve Yeşil Alanlar",
+     "package_title": "Parklar ve Yeşil Alanlar",
+     "package_uuid": "939d79ea-bcbc-431a-b04f-803d9a0834f8",
+     "resource_uuid": "314a8b94-ea29-4395-b6a3-d294d04aff8a",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/939d79ea-bcbc-431a-b04f-803d9a0834f8/resource/314a8b94-ea29-4395-b6a3-d294d04aff8a/download/barbaros-park.kmz",
+     "geo_file": "16.geojson",
+     "upstream_geo_resource_uuids": [
+      "314a8b94-ea29-4395-b6a3-d294d04aff8a",
+      "3d85a9d1-a2f5-4959-9c40-b96e4987db69",
+      "7fabacee-3bce-49dd-b256-da705f0e432f",
+      "59086f0c-b9b7-4935-933e-28c795e8fec6",
+      "6b35d33f-77b8-420e-9d34-a75dad208fbc",
+      "4550d240-24f2-4b28-96da-fe3e8dea7c8a"
+     ],
+     "serial_rule": {
+      "type": "none",
+      "reason": "single-park upload; no id of any kind; package holds many sibling single-park KML uploads ULASAV did not harvest"
+     },
+     "companion": null
+    },
+    {
+     "key": "17",
+     "title": "Spil Mahallesinde Bulunan Parklar",
+     "package_title": "Spil Mahallesinde Bulunan Parklar",
+     "package_uuid": "ead84813-cb5f-4171-b11d-b4c056a01992",
+     "resource_uuid": "34a55839-d175-49d0-b1d8-8a7fc4eb44fe",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/ead84813-cb5f-4171-b11d-b4c056a01992/resource/34a55839-d175-49d0-b1d8-8a7fc4eb44fe/download/spil-mahallesindeki-parklar.kmz",
+     "geo_file": "17.geojson",
+     "upstream_geo_resource_uuids": [
+      "34a55839-d175-49d0-b1d8-8a7fc4eb44fe"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/17_e4bbb2c4.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "18",
+     "title": "Yeni Mahallede Bulunan Parklar",
+     "package_title": "Yeni Mahallede Bulunan Parklar",
+     "package_uuid": "56bc90f4-66e1-450b-8675-d3f40bbc093d",
+     "resource_uuid": "4c09d542-ef8d-4919-8628-98151960d415",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/56bc90f4-66e1-450b-8675-d3f40bbc093d/resource/4c09d542-ef8d-4919-8628-98151960d415/download/yeni-mahalledeki-parklar.kmz",
+     "geo_file": "18.geojson",
+     "upstream_geo_resource_uuids": [
+      "4c09d542-ef8d-4919-8628-98151960d415"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/18_675ea39e.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "19",
+     "title": "Uncubozköy Mahallesinde Bulunan Parklar",
+     "package_title": "Uncubozköy Mahallesinde Bulunan Parklar",
+     "package_uuid": "e0efea89-62f3-4ba4-9578-b7d286c72dca",
+     "resource_uuid": "5d8e5858-973e-4e51-8d51-38aeadfc6a08",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/e0efea89-62f3-4ba4-9578-b7d286c72dca/resource/5d8e5858-973e-4e51-8d51-38aeadfc6a08/download/uncubozkoy-mahallesindeki-parklar.kmz",
+     "geo_file": "19.geojson",
+     "upstream_geo_resource_uuids": [
+      "5d8e5858-973e-4e51-8d51-38aeadfc6a08"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/19_9a0cdcf0.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "20",
+     "title": "Topçuasım Mahallesinde Bulunan Parklar",
+     "package_title": "Topçuasım Mahallesinde Bulunan Parklar",
+     "package_uuid": "02c1ada5-df50-43b4-b939-5e2e1ec2393e",
+     "resource_uuid": "ff4e8e31-4ec9-468a-b6a8-6aca1fa8b89e",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/02c1ada5-df50-43b4-b939-5e2e1ec2393e/resource/ff4e8e31-4ec9-468a-b6a8-6aca1fa8b89e/download/topcuasm-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "20.geojson",
+     "upstream_geo_resource_uuids": [
+      "ff4e8e31-4ec9-468a-b6a8-6aca1fa8b89e"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/20_e022135a.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "21",
+     "title": "Tevfikiye Mahallesinde Bulunan Parklar",
+     "package_title": "Tevfikiye Mahallesinde Bulunan Parklar",
+     "package_uuid": "c1c1641f-34d0-4265-a56c-1904e2ec345b",
+     "resource_uuid": "9f4c8ae0-db2b-4612-a34c-b7abab74e91c",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/c1c1641f-34d0-4265-a56c-1904e2ec345b/resource/9f4c8ae0-db2b-4612-a34c-b7abab74e91c/download/tevfikiye-mahallesindeki-parklar.kmz",
+     "geo_file": "21.geojson",
+     "upstream_geo_resource_uuids": [
+      "9f4c8ae0-db2b-4612-a34c-b7abab74e91c"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/21_a96e0f5a.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "22",
+     "title": "Muradiye Mahallesinde Bulunan Parklar",
+     "package_title": "Muradiye Mahallesinde Bulunan Parklar",
+     "package_uuid": "7efa4c95-3b26-4947-ae87-81c04f2ed92b",
+     "resource_uuid": "b7de4268-8bec-4afc-9251-0da6fba95031",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/7efa4c95-3b26-4947-ae87-81c04f2ed92b/resource/b7de4268-8bec-4afc-9251-0da6fba95031/download/muradiye-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "22.geojson",
+     "upstream_geo_resource_uuids": [
+      "b7de4268-8bec-4afc-9251-0da6fba95031"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/22_6e0f555f.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "23",
+     "title": "Mesir Mahallesinde Bulunan Parklar",
+     "package_title": "Mesir Mahallesinde Bulunan Parklar",
+     "package_uuid": "d32860c1-9792-47e8-964e-30cb5f3110bf",
+     "resource_uuid": "89aa3bed-1925-4e60-aa22-d4af66ea5866",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/d32860c1-9792-47e8-964e-30cb5f3110bf/resource/89aa3bed-1925-4e60-aa22-d4af66ea5866/download/mesir-mahallesindeki-parklar.kmz",
+     "geo_file": "23.geojson",
+     "upstream_geo_resource_uuids": [
+      "89aa3bed-1925-4e60-aa22-d4af66ea5866"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/23_5b3eec02.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "24",
+     "title": "Laleli Mahallesinde Bulunan Parklar",
+     "package_title": "Laleli Mahallesinde Bulunan Parklar",
+     "package_uuid": "b61e53df-1d31-43e3-a413-6751d06530bf",
+     "resource_uuid": "881e42b9-4537-48af-a12f-025009d68d3d",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/b61e53df-1d31-43e3-a413-6751d06530bf/resource/881e42b9-4537-48af-a12f-025009d68d3d/download/laleli-mahallesindeki-parklar.kmz",
+     "geo_file": "24.geojson",
+     "upstream_geo_resource_uuids": [
+      "881e42b9-4537-48af-a12f-025009d68d3d"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/24_c79de1d3.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "25",
+     "title": "Kuyualan Mahallesinde Bulunan Parklar",
+     "package_title": "Kuyualan Mahallesinde Bulunan Parklar",
+     "package_uuid": "3e06ac9d-28c7-4fe3-b99f-88d02686b417",
+     "resource_uuid": "0575822b-76d2-4795-9566-4b5d53128f19",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/3e06ac9d-28c7-4fe3-b99f-88d02686b417/resource/0575822b-76d2-4795-9566-4b5d53128f19/download/kuyualan-mahallesindeki-parklar.kmz",
+     "geo_file": "25.geojson",
+     "upstream_geo_resource_uuids": [
+      "0575822b-76d2-4795-9566-4b5d53128f19"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/25_225c48cf.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "26",
+     "title": "Keçiliköy Mahallesinde Bulunan Parklar",
+     "package_title": "Keçiliköy Mahallesinde Bulunan Parklar",
+     "package_uuid": "1c1a2caf-0250-4990-8f89-bf40090dfea8",
+     "resource_uuid": "bb142919-7608-40e9-be40-8fb3d232d707",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/1c1a2caf-0250-4990-8f89-bf40090dfea8/resource/bb142919-7608-40e9-be40-8fb3d232d707/download/kecilikoy-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "26.geojson",
+     "upstream_geo_resource_uuids": [
+      "bb142919-7608-40e9-be40-8fb3d232d707"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/26_c9944b9a.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "27",
+     "title": "Kaynak Mahallesinde Bulunan Parklar",
+     "package_title": "Kaynak Mahallesinde Bulunan Parklar",
+     "package_uuid": "953b8d77-6715-4e86-8ec5-b4e4eefdc287",
+     "resource_uuid": "f0a58225-7c5a-46bb-88a7-ee4bc6c58135",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/953b8d77-6715-4e86-8ec5-b4e4eefdc287/resource/f0a58225-7c5a-46bb-88a7-ee4bc6c58135/download/kaynak-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "27.geojson",
+     "upstream_geo_resource_uuids": [
+      "f0a58225-7c5a-46bb-88a7-ee4bc6c58135"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/27_4e284540.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "28",
+     "title": "Hafsa Sultan Mahallesinde Bulunan Parklar",
+     "package_title": "Hafsa Sultan Mahallesinde Bulunan Parklar",
+     "package_uuid": "ce5c64c6-a005-4f5e-8366-2687f1330750",
+     "resource_uuid": "2029c21c-908d-4de6-8b6b-6c791c1d013e",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/ce5c64c6-a005-4f5e-8366-2687f1330750/resource/2029c21c-908d-4de6-8b6b-6c791c1d013e/download/hafsa-sultan-mahallesindeki-parklar.kmz",
+     "geo_file": "28.geojson",
+     "upstream_geo_resource_uuids": [
+      "2029c21c-908d-4de6-8b6b-6c791c1d013e"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/28_296a79c1.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "29",
+     "title": "Güzelyurt Mahallesinde Bulunan Parklar",
+     "package_title": "Güzelyurt Mahallesinde Bulunan Parklar",
+     "package_uuid": "6f564a26-8fc8-476a-a8c1-9fdaa54596b3",
+     "resource_uuid": "ad7a03ac-595e-4d41-b327-af64c14c6aa7",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/6f564a26-8fc8-476a-a8c1-9fdaa54596b3/resource/ad7a03ac-595e-4d41-b327-af64c14c6aa7/download/guzelyurt-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "29.geojson",
+     "upstream_geo_resource_uuids": [
+      "ad7a03ac-595e-4d41-b327-af64c14c6aa7"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/29_34554169.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "30",
+     "title": "Fatih Mahallesinde Bulunan Parklar",
+     "package_title": "Fatih Mahallesinde Bulunan Parklar",
+     "package_uuid": "c08b4acd-adb0-405c-91a7-e6cd4492f933",
+     "resource_uuid": "d2e7c87d-d75e-4fae-ab8f-f74430e00218",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/c08b4acd-adb0-405c-91a7-e6cd4492f933/resource/d2e7c87d-d75e-4fae-ab8f-f74430e00218/download/fatih-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "30.geojson",
+     "upstream_geo_resource_uuids": [
+      "d2e7c87d-d75e-4fae-ab8f-f74430e00218"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/30_8cfb9785.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "31",
+     "title": "Cumhuriyet Mahallesinde Bulunan Parklar",
+     "package_title": "Cumhuriyet Mahallesinde Bulunan Parklar",
+     "package_uuid": "2c18d345-bbc5-4d62-9649-afa5c59a5621",
+     "resource_uuid": "bb1d53e7-60ff-41bc-ad0c-54f682453692",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/2c18d345-bbc5-4d62-9649-afa5c59a5621/resource/bb1d53e7-60ff-41bc-ad0c-54f682453692/download/cumhuriyet-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "31.geojson",
+     "upstream_geo_resource_uuids": [
+      "bb1d53e7-60ff-41bc-ad0c-54f682453692"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/31_fcf089db.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "32",
+     "title": "Barbaros Mahallesinde Bulunan Parklar",
+     "package_title": "Barbaros Mahallesinde Bulunan Parklar",
+     "package_uuid": "99da0f04-50b6-4c97-9252-8b83e4dea0fc",
+     "resource_uuid": "df86a270-e829-4182-b36a-fd6a6830e081",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/99da0f04-50b6-4c97-9252-8b83e4dea0fc/resource/df86a270-e829-4182-b36a-fd6a6830e081/download/barbaros-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "32.geojson",
+     "upstream_geo_resource_uuids": [
+      "df86a270-e829-4182-b36a-fd6a6830e081"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/32_f377896a.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "33",
+     "title": "Atatürk Mahallesinde Bulunan Parklar",
+     "package_title": "Atatürk Mahallesinde Bulunan Parklar",
+     "package_uuid": "aba70412-7d67-4dc2-9735-e4fa29cee4d1",
+     "resource_uuid": "f2d41786-aedb-4e27-b218-5ee04635f3ba",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/aba70412-7d67-4dc2-9735-e4fa29cee4d1/resource/f2d41786-aedb-4e27-b218-5ee04635f3ba/download/ataturk-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "33.geojson",
+     "upstream_geo_resource_uuids": [
+      "f2d41786-aedb-4e27-b218-5ee04635f3ba"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/33_be00ae70.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "34",
+     "title": "Akmescit Mahallesinde Bulunan Parklar",
+     "package_title": "Akmescit Mahallesinde Bulunan Parklar",
+     "package_uuid": "5d4591df-a482-4e7d-bb87-1e3908ed389f",
+     "resource_uuid": "2bef5f50-9c63-4800-a716-0e3cdaae1d08",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/5d4591df-a482-4e7d-bb87-1e3908ed389f/resource/2bef5f50-9c63-4800-a716-0e3cdaae1d08/download/akmescit-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "34.geojson",
+     "upstream_geo_resource_uuids": [
+      "2bef5f50-9c63-4800-a716-0e3cdaae1d08"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/34_29f0ce9f.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "35",
+     "title": "Lalapaşa Mahallesi Parklar",
+     "package_title": "Lalapaşa Mahallesi Parklar",
+     "package_uuid": "0847f636-c480-4b3c-9208-323e7f468925",
+     "resource_uuid": "7488b343-9251-4980-9b9b-099dc026fbc4",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/0847f636-c480-4b3c-9208-323e7f468925/resource/7488b343-9251-4980-9b9b-099dc026fbc4/download/lalapaa-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "35.geojson",
+     "upstream_geo_resource_uuids": [
+      "7488b343-9251-4980-9b9b-099dc026fbc4"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/35_13a752f4.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "37",
+     "title": "Ayn-ı Ali Mahallesinde Bulunan Parklar",
+     "package_title": "Ayn-ı Ali Mahallesinde Bulunan Parklar",
+     "package_uuid": "2d97422f-45a5-488b-ab83-afb1804ca620",
+     "resource_uuid": "65d5e81a-da9e-46cd-8e5f-021661f2724a",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/2d97422f-45a5-488b-ab83-afb1804ca620/resource/65d5e81a-da9e-46cd-8e5f-021661f2724a/download/ayn-ali-mahallesindeki-parklar.kmz",
+     "geo_file": "37.geojson",
+     "upstream_geo_resource_uuids": [
+      "65d5e81a-da9e-46cd-8e5f-021661f2724a"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/37_2e780a47.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "38",
+     "title": "75.Yıl Mahallesinde Bulunan Parklar",
+     "package_title": "75.Yıl Mahallesinde Bulunan Parklar",
+     "package_uuid": "e142d804-52da-4f60-be0b-7b401faa91a5",
+     "resource_uuid": "eca37216-c104-4c99-b205-95cee221b0c0",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/e142d804-52da-4f60-be0b-7b401faa91a5/resource/eca37216-c104-4c99-b205-95cee221b0c0/download/75.yl-mahallesindeki-parklar.kmz",
+     "geo_file": "38.geojson",
+     "upstream_geo_resource_uuids": [
+      "eca37216-c104-4c99-b205-95cee221b0c0"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/38_556d5d41.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "39",
+     "title": "50.Yıl Mahallesinde Bulunan Parklar",
+     "package_title": "50.Yıl Mahallesinde Bulunan Parklar",
+     "package_uuid": "f58e26ae-7400-44b2-a1dd-2fe806e78d0e",
+     "resource_uuid": "5921d8ac-f7d6-4325-a69f-658afce26c92",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/f58e26ae-7400-44b2-a1dd-2fe806e78d0e/resource/5921d8ac-f7d6-4325-a69f-658afce26c92/download/50.yl-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "39.geojson",
+     "upstream_geo_resource_uuids": [
+      "5921d8ac-f7d6-4325-a69f-658afce26c92"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/39_11174e11.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "40",
+     "title": "Merkez Efendi Mahallesinde Bulunan Parklar",
+     "package_title": "Merkez Efendi Mahallesinde Bulunan Parklar",
+     "package_uuid": "a9e9e67d-c65d-4a2d-96c1-3c1fc43e393a",
+     "resource_uuid": "0eb32268-11db-4fa3-b7f7-4d99587f37ba",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/a9e9e67d-c65d-4a2d-96c1-3c1fc43e393a/resource/0eb32268-11db-4fa3-b7f7-4d99587f37ba/download/merkez-efendi-mahallesindeki-parklar.kmz",
+     "geo_file": "40.geojson",
+     "upstream_geo_resource_uuids": [
+      "0eb32268-11db-4fa3-b7f7-4d99587f37ba"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/40_1b40f8f2.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "41",
+     "title": "Mareşal Fevzi Çakmak Mahallesinde Bulunan Parklar",
+     "package_title": "Mareşal Fevzi Çakmak Mahallesinde Bulunan Parklar",
+     "package_uuid": "d5d820e6-7fe6-4948-9fd7-68d2e22af9b1",
+     "resource_uuid": "72f01c82-9bde-46ef-9451-e521ef3dd6a2",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/d5d820e6-7fe6-4948-9fd7-68d2e22af9b1/resource/72f01c82-9bde-46ef-9451-e521ef3dd6a2/download/mareal-fevzi-cakmak-mahallesinde-bulunan-parklar.kmz",
+     "geo_file": "41.geojson",
+     "upstream_geo_resource_uuids": [
+      "72f01c82-9bde-46ef-9451-e521ef3dd6a2"
+     ],
+     "serial_rule": {
+      "type": "name_regex",
+      "regex": "^PARK\\s*(\\d+)",
+      "flags": "i"
+     },
+     "companion": {
+      "type": "text_regex",
+      "path": "attach/out/41_a833213f.txt",
+      "regex": "Park\\s*(\\d+)\\s*:",
+      "flags": "gi",
+      "note": "mahalle DOCX Park n blocks"
+     }
+    },
+    {
+     "key": "42",
+     "title": "Akhisar İlçesindeki Parklar",
+     "package_title": "Akhisar İlçesindeki Parklar",
+     "package_uuid": "7309b544-3bda-4b80-80c6-351d693c627f",
+     "resource_uuid": "441892b7-5067-4c85-8994-cfb5133671e3",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/7309b544-3bda-4b80-80c6-351d693c627f/resource/441892b7-5067-4c85-8994-cfb5133671e3/download/parklar.kmz",
+     "geo_file": "42.geojson",
+     "upstream_geo_resource_uuids": [
+      "441892b7-5067-4c85-8994-cfb5133671e3"
+     ],
+     "serial_rule": {
+      "type": "none",
+      "reason": "5 LineString features all named \"30\" (duplicate, not parks), 7 named points; no ids"
+     },
+     "companion": null
+    },
+    {
+     "key": "43",
+     "title": "Parklar ve Çocuk Oyun Alanları",
+     "package_title": "Parklar ve Çocuk Oyun Alanları",
+     "package_uuid": "73c3a861-dcbb-4da7-9b07-41c49f003f7c",
+     "resource_uuid": "d20bc786-3586-4f3b-8432-2d1056a69780",
+     "download_url": "https://acikveri.manisa.bel.tr/dataset/73c3a861-dcbb-4da7-9b07-41c49f003f7c/resource/d20bc786-3586-4f3b-8432-2d1056a69780/download/belediye-bakanlar-park.kml",
+     "geo_file": "43.geojson",
+     "upstream_geo_resource_uuids": [
+      "d20bc786-3586-4f3b-8432-2d1056a69780",
+      "8bf4ae3c-f1c3-4c99-8e41-bbbd0b319417",
+      "92b6ccef-adcc-4a3e-a48f-4937c1e14bab",
+      "bb84fedb-2a18-431f-bf4d-4b5f90f900d5",
+      "a0765f23-6fc4-449f-ad19-160ff5272f03",
+      "09082100-293a-4343-aaa1-dda8ce5e25d1",
+      "6d77a8f2-cd51-40c7-955e-9b96d44cf82f",
+      "f82a7a20-496a-461b-b0f3-1c35cd04f811",
+      "69cdc484-3f6d-4e8e-bfc8-1cf425de985e",
+      "97ebed38-9ef7-444f-8098-c163d48b88c9",
+      "84a6f786-d55c-4712-9a94-859c925a915d"
+     ],
+     "serial_rule": {
+      "type": "none",
+      "reason": "single-park upload; no id of any kind; package holds many sibling single-park KML uploads ULASAV did not harvest"
+     },
+     "companion": null
+    }
+   ]
+  }
+ ]
+}
