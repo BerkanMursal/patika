@@ -21,12 +21,15 @@ import { pickPhoto } from '../services/photos';
 import { submitObservation } from '../services/repository';
 import { getDeviceLocation } from '../services/location';
 import { locationFailureMessage } from '../services/location-common';
+import { useParkRoute } from '../state/useParkRoute';
+import { ParkUnavailable } from '../components/ParkUnavailable';
 export function RecordScreen() {
   const {
-      params: { id },
+      params: { id, redirectedFrom },
     } = useRoute<RouteProp<RootStack, 'Record'>>(),
     app = useApp(),
-    nav = useNavigation<NativeStackNavigationProp<RootStack>>();
+    nav = useNavigation<NativeStackNavigationProp<RootStack>>(),
+    route = useParkRoute('Record', id, redirectedFrom);
   const operation = useRef(Crypto.randomUUID()),
     busy = useRef(false);
   const [park, setPark] = useState<Park | null>(null),
@@ -42,9 +45,10 @@ export function RecordScreen() {
     [picking, setPicking] = useState(false),
     [saved, setSaved] = useState(false);
   useEffect(() => {
-    void Promise.all([app.getPark(id), app.getPoints(id)])
-      .then(([p, pts]) => {
-        setPark(p);
+    void Promise.all([route.resolve(), app.getPoints(id)])
+      .then(([action, pts]) => {
+        if (action.type !== 'show') return;
+        setPark(action.park);
         setPoints(pts);
         setPoint(pts[0]?.id ?? '');
       })
@@ -102,6 +106,7 @@ export function RecordScreen() {
       busy.current = false;
     }
   }
+  if (route.state.kind === 'unavailable') return <ParkUnavailable message={route.state.message} />;
   if (saved)
     return (
       <View
@@ -285,10 +290,11 @@ export function RecordScreen() {
 }
 export function ObserveScreen() {
   const {
-      params: { id },
+      params: { id, redirectedFrom },
     } = useRoute<RouteProp<RootStack, 'Observe'>>(),
     app = useApp(),
-    nav = useNavigation();
+    nav = useNavigation(),
+    route = useParkRoute('Observe', id, redirectedFrom);
   const [point, setPoint] = useState(''),
     [points, setPoints] = useState<Point[]>([]),
     [food, setFood] = useState<BowlStatus>('unknown'),
@@ -299,6 +305,8 @@ export function ObserveScreen() {
     [done, setDone] = useState(false);
   const busy = useRef(false);
   useEffect(() => {
+    // offline: keep the previous behaviour (points load decides), no lifecycle state
+    void route.resolve().catch(() => {});
     void app
       .getPoints(id)
       .then((pts) => {
@@ -342,6 +350,7 @@ export function ObserveScreen() {
       busy.current = false;
     }
   }
+  if (route.state.kind === 'unavailable') return <ParkUnavailable message={route.state.message} />;
   return (
     <ScrollView style={s.page} contentContainerStyle={s.content}>
       <Text style={t.title}>Şu an ne görüyorsun?</Text>

@@ -12,13 +12,14 @@ begin
 end;$$;
 
 -- expect `stmt` (followed by an immediate constraint check) to fail with errcode `code`
+-- (`code` is a regex alternative list: SQLSTATEs differ across Postgres versions for RESTRICT)
 create function pg_temp.rejects(stmt text, code text, label text) returns void language plpgsql as $$
 begin
   begin
     execute stmt;
     set constraints all immediate;
   exception when others then
-    if sqlstate <> code then raise exception 'FAIL: % (expected %, got %: %)', label, code, sqlstate, sqlerrm; end if;
+    if sqlstate !~ ('^(' || code || ')$') then raise exception 'FAIL: % (expected %, got %: %)', label, code, sqlstate, sqlerrm; end if;
     raise notice 'PASS: % [% %]', label, sqlstate, sqlerrm;
     return;
   end;
@@ -130,7 +131,7 @@ set constraints all deferred;
 select pg_temp.rejects($$update public.canonical_park_aliases set reason='changed' where retired_park_id='f0000000-0000-4000-8000-000000000003'$$, '55000', 'alias update blocked without maintenance mode');
 select pg_temp.rejects($$delete from public.canonical_park_tombstones where retired_park_id='f0000000-0000-4000-8000-0000000000bb'$$, '55000', 'tombstone delete blocked without maintenance mode');
 select pg_temp.rejects($$truncate public.canonical_park_aliases$$, '55000', 'alias truncate blocked');
-select pg_temp.rejects($$delete from public.parks where id='f0000000-0000-4000-8000-000000000001'$$, '23503', 'hard delete of an alias survivor blocked');
+select pg_temp.rejects($$delete from public.parks where id='f0000000-0000-4000-8000-000000000001'$$, '23503|23001', 'hard delete of an alias survivor blocked');
 
 -- positive flattening: survivor #1 later retires into #2 -> re-point its aliases in maintenance mode
 set local patika.lifecycle_maintenance = 'on';

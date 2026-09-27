@@ -1,8 +1,8 @@
 export type RootStack = {
   Main: undefined;
-  Park: { id: string };
-  Record: { id: string };
-  Observe: { id: string };
+  Park: { id: string; redirectedFrom?: string };
+  Record: { id: string; redirectedFrom?: string };
+  Observe: { id: string; redirectedFrom?: string };
   Auth: undefined;
   Reset: undefined;
   Outbox: undefined;
@@ -12,7 +12,7 @@ export type RootStack = {
   Privacy: undefined;
   Report: { parkId?: string; feedingId?: string; rescueCaseId?: string };
   Moderation: undefined;
-  SuggestName: { id: string };
+  SuggestName: { id: string; redirectedFrom?: string };
   NameReview: undefined;
   Leaderboard: undefined;
   RescueReport: undefined;

@@ -19,12 +19,16 @@ import { C } from '../ui/theme';
 import { FeedingCard } from '../components/FeedingCard';
 import * as api from '../services/repository';
 import { parkPlace } from '../core/park-names';
+import { parkMessages } from '../core/park-lifecycle';
+import { useParkRoute } from '../state/useParkRoute';
+import { ParkUnavailable } from '../components/ParkUnavailable';
 export function ParkScreen() {
   const {
-      params: { id },
+      params: { id, redirectedFrom },
     } = useRoute<RouteProp<RootStack, 'Park'>>(),
     app = useApp(),
-    nav = useNavigation<NativeStackNavigationProp<RootStack>>();
+    nav = useNavigation<NativeStackNavigationProp<RootStack>>(),
+    route = useParkRoute('Park', id, redirectedFrom);
   const [park, setPark] = useState<Park | null>(null),
     [events, setEvents] = useState<Feeding[]>([]),
     [points, setPoints] = useState<Point[]>([]),
@@ -35,12 +39,13 @@ export function ParkScreen() {
   async function load() {
     setLoading(true);
     try {
-      const [p, e, pts] = await Promise.all([
-        app.getPark(id),
+      const [action, e, pts] = await Promise.all([
+        route.resolve(),
         app.getEvents(id),
         app.getPoints(id),
       ]);
-      setPark(p);
+      if (action.type === 'redirect') return;
+      setPark(action.type === 'show' ? action.park : null);
       setEvents(e);
       setHasMore(e.length === 30);
       setPoints(pts);
@@ -58,8 +63,15 @@ export function ParkScreen() {
   );
   useEffect(() => {
     const p = app.parks.find((p) => p.id === id);
-    if (p) setPark(p);
-  }, [app.parks, id]);
+    if (p && route.state.kind !== 'unavailable') setPark(p);
+  }, [app.parks, id, route.state.kind]);
+  if (route.state.kind === 'redirecting')
+    return (
+      <View style={s.loading}>
+        <ActivityIndicator color={C.green} />
+      </View>
+    );
+  if (route.state.kind === 'unavailable') return <ParkUnavailable message={route.state.message} />;
   if (loading && !park)
     return (
       <View style={s.loading}>
@@ -116,6 +128,9 @@ export function ParkScreen() {
           </Text>
         </View>
       </View>
+      {redirectedFrom ? (
+        <Notice text={`${parkMessages.updated.title} ${parkMessages.updated.detail}`} />
+      ) : null}
       {error ? <Notice text={error} error /> : null}
       <Card style={{ gap: 12 }}>
         <Text style={t.h2}>

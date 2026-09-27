@@ -5,7 +5,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStack } from '../navigation';
 import type { Feeding, Park } from '../core/types';
 import { useApp } from '../state/AppProvider';
-import { Button, Empty, Notice, textStyles as t } from '../ui/common';
+import { Button, Card, Empty, Notice, textStyles as t } from '../ui/common';
+import { favoriteView, type ParkMessage } from '../core/park-lifecycle';
 import { C } from '../ui/theme';
 import { FeedingCard } from '../components/FeedingCard';
 import { ParkCard } from '../components/ParkCard';
@@ -117,12 +118,19 @@ export function FavoritesScreen() {
   const app = useApp(),
     nav = useNavigation<NativeStackNavigationProp<RootStack>>(),
     [parks, setParks] = useState<Park[]>([]),
+    [gone, setGone] = useState<{ id: string; message: ParkMessage }[]>([]),
     [error, setError] = useState('');
   useFocusEffect(
     useCallback(() => {
-      void Promise.all(app.favorites.map(app.getPark))
-        .then((ps) => setParks(ps.filter((p): p is Park => p !== null)))
-        .catch(() => setError('Takip edilen parklar yüklenemedi.'));
+      void Promise.allSettled(
+        app.favorites.map(async (id) => ({ id, lookup: await app.resolvePark(id) })),
+      ).then((results) => {
+        const loaded = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+        const view = favoriteView(loaded);
+        setParks(view.parks);
+        setGone(view.unavailable);
+        setError(loaded.length < results.length ? 'Takip edilen parklar yüklenemedi.' : '');
+      });
     }, [app.favorites]),
   );
   return (
@@ -130,11 +138,24 @@ export function FavoritesScreen() {
       <Text style={t.title}>Takip ettiğim parklar</Text>
       <Text style={t.body}>Tekrar uğramak istediğin parklar bir arada.</Text>
       {error ? <Notice error text={error} /> : null}
-      {parks.length ? (
-        parks.map((p) => (
-          <ParkCard key={p.id} park={p} onPress={() => nav.navigate('Park', { id: p.id })} />
-        ))
-      ) : (
+      {parks.map((p) => (
+        <ParkCard key={p.id} park={p} onPress={() => nav.navigate('Park', { id: p.id })} />
+      ))}
+      {gone.map((g) => (
+        <Card key={g.id} style={{ gap: 10 }}>
+          <Text style={t.h2}>{g.message.title}</Text>
+          <Text style={t.body}>{g.message.detail}</Text>
+          <Button
+            secondary
+            label="Takibi bırak"
+            icon="heart-dislike-outline"
+            onPress={() =>
+              void app.toggleFavorite(g.id).catch(() => setError('Takip güncellenemedi.'))
+            }
+          />
+        </Card>
+      ))}
+      {parks.length || gone.length ? null : (
         <Empty
           title="Kalbine yakın parklar"
           detail="Park ayrıntısındaki kalbe dokunarak buraya ekleyebilirsin."

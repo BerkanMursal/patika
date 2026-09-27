@@ -7,6 +7,7 @@ import * as api from '../services/repository';
 import { demoData } from '../core/demo';
 import { mergeFeeding, validateFeeding } from '../core/domain';
 import { presentPark, restoreParkActivity } from '../core/park-names';
+import { lookupPark, type ParkLookup } from '../core/park-lifecycle';
 import { persistPhoto, removeLocalPhoto } from '../services/photos';
 import type { Feeding, FeedingDraft, Park, Pending, Point, Region, Viewer } from '../core/types';
 
@@ -22,6 +23,7 @@ type Store = {
   setRegion: (r: Region) => void;
   refresh: (query?: string) => Promise<void>;
   getPark: (id: string) => Promise<Park | null>;
+  resolvePark: (id: string) => Promise<ParkLookup>;
   getPoints: (id: string) => Promise<Point[]>;
   getEvents: (parkId?: string, mine?: boolean, before?: string) => Promise<Feeding[]>;
   favorites: string[];
@@ -284,6 +286,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   async function getPark(id: string) {
     return configured ? api.loadPark(id) : (parksRef.current.find((p) => p.id === id) ?? null);
   }
+  // Single entry point for opening a park by id: live parks are served exactly as
+  // getPark does; merged/retired ids are resolved (see core/park-lifecycle.ts).
+  async function resolvePark(id: string): Promise<ParkLookup> {
+    if (configured) return lookupPark(id, { loadPark: api.loadPark, resolve: api.resolveParkId });
+    const park = parksRef.current.find((p) => p.id === id) ?? null;
+    return { resolution: park ? { kind: 'live', id } : { kind: 'not_found' }, park };
+  }
   async function getPoints(id: string) {
     return configured ? api.loadPoints(id) : demoSeed.points.filter((p) => p.park_id === id);
   }
@@ -355,6 +364,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setRegion,
         refresh,
         getPark,
+        resolvePark,
         getPoints,
         getEvents,
         favorites,

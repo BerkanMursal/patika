@@ -9,6 +9,8 @@ import { parkPlace, parkDisplayName } from '../core/park-names';
 import { loadNameSuggestions, suggestName, reviewName } from '../services/park-names';
 import { Button, Card, Empty, Field, Notice, textStyles as t } from '../ui/common';
 import { C } from '../ui/theme';
+import { useParkRoute } from '../state/useParkRoute';
+import { ParkUnavailable } from '../components/ParkUnavailable';
 
 const content = {
   padding: 24,
@@ -29,10 +31,11 @@ const errorText = (e: unknown) =>
 
 export function NameSuggestionScreen() {
   const {
-    params: { id },
+    params: { id, redirectedFrom },
   } = useRoute<RouteProp<RootStack, 'SuggestName'>>();
   const app = useApp(),
-    nav = useNavigation<NativeStackNavigationProp<RootStack>>();
+    nav = useNavigation<NativeStackNavigationProp<RootStack>>(),
+    route = useParkRoute('SuggestName', id, redirectedFrom);
   const [park, setPark] = useState<Park | null>(null),
     [suggestions, setSuggestions] = useState<NameSuggestion[]>([]),
     [name, setName] = useState(''),
@@ -51,12 +54,12 @@ export function NameSuggestionScreen() {
       setName('');
       setEvidence('');
       Promise.all([
-        app.getPark(id),
+        route.resolve(),
         app.viewer ? loadNameSuggestions(app.viewer, id) : Promise.resolve([]),
       ])
-        .then(([p, items]) => {
+        .then(([action, items]) => {
           if (active) {
-            setPark(p);
+            setPark(action.type === 'show' ? action.park : null);
             setSuggestions(items.filter((s) => s.user_id === app.viewer?.id));
           }
         })
@@ -90,6 +93,7 @@ export function NameSuggestionScreen() {
     }
   }
   const pending = suggestions.some((s) => s.status === 'pending');
+  if (route.state.kind === 'unavailable') return <ParkUnavailable message={route.state.message} />;
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: C.bg }}

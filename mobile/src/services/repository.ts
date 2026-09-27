@@ -15,6 +15,7 @@ import type {
 import { requireBackend } from './supabase';
 import { photoBytes } from './photos';
 import { presentPark, parkDisplayName } from '../core/park-names';
+import type { ResolveRow } from '../core/park-lifecycle';
 
 export async function loadParks(region: Region, query = ''): Promise<Park[]> {
   const controller = new AbortController();
@@ -39,6 +40,17 @@ export async function loadPark(id: string): Promise<Park | null> {
   const { data, error } = await requireBackend().rpc('get_park', { p_id: id });
   if (error) throw error;
   return data?.[0] ? presentPark(data[0]) : null;
+}
+// Lifecycle state of a park id that get_park no longer serves (merged / retired).
+// A backend without the lifecycle migration (resolve_park_id missing) answers as
+// "not found", i.e. exactly the previous behaviour.
+export async function resolveParkId(id: string): Promise<ResolveRow> {
+  const { data, error } = await requireBackend().rpc('resolve_park_id', { p_id: id });
+  if (error) {
+    if (error.code === 'PGRST202' || error.code === '42883') return null;
+    throw error;
+  }
+  return (data?.[0] as ResolveRow) ?? null;
 }
 export async function loadPoints(parkId: string): Promise<Point[]> {
   const { data, error } = await requireBackend()
