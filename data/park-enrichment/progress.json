@@ -1,7 +1,7 @@
 {
   "version": 1,
   "goal": "Build the most complete, licensed, deterministic-identity canonical Turkey park registry (OSM + official municipal sources + future nationwide gap sources), served to the mobile app via Supabase/PostGIS viewport queries rather than a bundled JSON. This session: integrate real municipal adapters one source at a time, checkpoint after each.",
-  "phase": "release_candidate_frozen_committed",
+  "phase": "canonical_release_infrastructure_committed",
   "current_source": null,
   "completed_sources": [
     {
@@ -355,7 +355,7 @@
     "data/park-enrichment/.cache/ulasav/full-classification.json (gitignored, final result)"
   ],
   "last_successful_command": "node scripts/verify-consolidation-release-candidate.mjs -> all invariants 0; canonical 26,405; backlog 413; manifest 66 clean",
-  "next_step": "Frozen RC (26,405 canonical / 413 review / 24,750 OSM) committed and pushed to origin/main. Next, only on explicit instruction: alias/tombstone DB migration + apply plan. Production canonical 26,433 / backlog 615 untouched; no DB writes.",
+  "next_step": "Canonical release infrastructure committed and pushed. Next only on explicit instruction + credentials: read-only production inventory and production DB-only policy file. No production write/migration/import.",
   "blockers": [
     {
       "id": "balikesir_no_stable_id",
@@ -601,7 +601,7 @@
       "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Generic Config-Driven Municipal Ingestion Framework' for the full report."
     }
   ],
-  "updated_at": "2026-09-27T14:47:11.954803Z",
+  "updated_at": "2026-09-27T15:18:17.418389Z",
   "overture_gap_analysis": {
     "stage": "gap_analysis_complete_not_merged_not_imported",
     "release": "2026-08-19.0",
@@ -1480,6 +1480,197 @@
       "e4c2ea2 feat(data): add physical park consolidation and review resolution",
       "23e0864 feat(data): add physical park taxonomy gate and RC verification",
       "docs(data): freeze nationwide park registry release candidate"
+    ]
+  },
+  "production_canonical_lifecycle_schema": {
+    "started": "2026-09-27",
+    "head": "c77f293",
+    "frozen_rc": {
+      "canonical": 26405,
+      "review": 413,
+      "osm_backed": 24750,
+      "retired": 66,
+      "aliases": 33,
+      "tombstones": 33
+    },
+    "production": {
+      "canonical": 26433,
+      "review": 615
+    },
+    "first_action": "inventory all parks.id references in supabase/migrations + app lookup paths before writing any migration",
+    "db_write": false,
+    "rc_import": false,
+    "status": "schema_done_local_only",
+    "migration": "supabase/migrations/202609270001_canonical_park_lifecycle.sql",
+    "test": "supabase/tests/canonical_park_lifecycle.test.sql",
+    "design_doc": "docs/CANONICAL_PARK_LIFECYCLE.md",
+    "local_db": {
+      "applied": true,
+      "container": "supabase_db_patika",
+      "tests": "40/40 PASS",
+      "parks": 1981,
+      "refs": 2872,
+      "fixtures_left": 0
+    },
+    "dependency_inventory": {
+      "direct_fks": {
+        "feeding_points": "CASCADE (general point id = park id)",
+        "feeding_events": "NO ACTION",
+        "favorites": "CASCADE",
+        "reports": "CASCADE",
+        "park_name_suggestions": "CASCADE",
+        "park_source_refs": "CASCADE"
+      },
+      "indirect": [
+        "observations.point_id",
+        "feeding_events.point_id"
+      ],
+      "rpcs": 11,
+      "views": [
+        "park_summaries"
+      ],
+      "policies": [
+        "points_read",
+        "events_read",
+        "storage.photos_read"
+      ],
+      "deep_link": "patika://park/:id -> get_park"
+    },
+    "db_facts": {
+      "rc_ever_imported": false,
+      "local_parks_in_rc": 1978,
+      "db_only_parks": [
+        "2 smoke-test fixtures",
+        "osm way/600671941 (not in snapshot, 1 feeding event)"
+      ],
+      "retired_ids_in_db": 0
+    },
+    "bug_fixed": "deferred row triggers re-read current rows instead of the queued NEW image",
+    "frozen_hashes": {
+      "base_nationwide_canonical_preview": "46e485f2ef7c6890d9df539b9ab495a36ddc82bbe69674ca7ebe2889a137d30a",
+      "final_canonical_preview": "d79bebe411fb899fabb1d12ac2e428b16dd82815f636d74ddc1e706709638eb8",
+      "canonical_alias_manifest": "4c382fb4f1d6569331c2de07fb72cf0c7b5020e02cd004cf8120df10008448f6",
+      "taxonomy_review_queue": "795fd3bf0fa733986e9c20e7385348929ac58d1c5fa8a2cec0ff8e9acfef895b",
+      "resolution": "6184356f73a76594e9836d850987ce8df924da9f30e65100990a55beac0b94d9"
+    },
+    "blockers": [
+      "read-only production DB inventory",
+      "decisions for DB-only parks (source-withdrawn status?)",
+      "no DB table for 413 review records + non-park ledger",
+      "single-transaction SQL importer not written",
+      "release bundle (manifest contract) not exported/frozen",
+      "migration not yet in PGlite suite",
+      "client does not call resolve_park_id yet"
+    ],
+    "production_write": false,
+    "committed": false
+  },
+  "lifecycle_completion_rc_applier": {
+    "date": "2026-09-27",
+    "production_inventory": "UNAVAILABLE (no credentials; mobile/.env.local -> 127.0.0.1)",
+    "correction": "way/600671941 has NO feeding event (earlier claim wrong; the event belongs to smoke fixture a0000000-...001)",
+    "db_only_parks": [
+      {
+        "id": "a0000000-0000-4000-8000-000000000001",
+        "class": "TEST_FIXTURE",
+        "history": true,
+        "action": "untouched"
+      },
+      {
+        "id": "a0000000-0000-4000-8000-000000000002",
+        "class": "TEST_FIXTURE",
+        "history": false,
+        "action": "untouched"
+      },
+      {
+        "id": "d6f93406-fb19-5611-be31-e9648bee2f2e",
+        "osm_id": "way/600671941",
+        "class": "SOURCE_WITHDRAWN_NO_HISTORY",
+        "history": false,
+        "action": "tombstone source_withdrawn, row inactive, ref -> tombstone refs"
+      }
+    ],
+    "schema": {
+      "migration": "supabase/migrations/202609270001_canonical_park_lifecycle.sql",
+      "tables": [
+        "canonical_park_releases",
+        "canonical_park_aliases",
+        "canonical_park_tombstones",
+        "canonical_park_tombstone_refs",
+        "canonical_park_reviews",
+        "canonical_park_rejections"
+      ],
+      "function": "resolve_park_id(uuid)",
+      "tombstone_statuses": [
+        "taxonomy_review",
+        "non_park",
+        "source_withdrawn"
+      ],
+      "tests": "49/49"
+    },
+    "bundle": {
+      "release_id": "patika-parks-2026-09-27-rc1",
+      "config": "data/canonical-releases/patika-parks-2026-09-27-rc1.json",
+      "dir": "data/park-enrichment/.cache/releases/patika-parks-2026-09-27-rc1",
+      "manifest_sha256": "b03bea54af0b8bdfbbdce5208407fffc4bd441a273c532379ac68ff86f3ac88a",
+      "counts": {
+        "parks": 26405,
+        "osm": 24750,
+        "refs": 27944,
+        "aliases": 33,
+        "tombstones": 33,
+        "tombstone_refs": 33,
+        "reviews": 413,
+        "rejections": 5
+      },
+      "reproducible": true
+    },
+    "importer": [
+      "scripts/apply-canonical-release.mjs",
+      "scripts/sql/apply-canonical-release.sql",
+      "scripts/canonical-release-bundle.mjs",
+      "scripts/export-canonical-release-bundle.mjs"
+    ],
+    "local_test": {
+      "script": "scripts/test-apply-canonical-release-local.mjs",
+      "result": "35/35 PASS",
+      "plain_baseline_dry_run": {
+        "parks_after": 26408,
+        "active": 26407,
+        "inactive": 1,
+        "aliases": 33,
+        "tombstones": 34,
+        "tombstone_refs": 34,
+        "reviews": 413,
+        "rejections": 5,
+        "refs": 27944,
+        "inserted": 24427,
+        "updated": 1860
+      },
+      "seeded_apply": {
+        "active": 26407,
+        "inactive": 5
+      },
+      "second_apply_changed_rows": 0,
+      "restored": true
+    },
+    "bugs_fixed": [
+      "baseline check rejected tombstone refs that are also review/rejection items",
+      "plpgsql variable/alias name collision in invariant block"
+    ],
+    "blockers": [
+      "production credentials + read-only inventory + production DB-only policy file",
+      "production migration approval",
+      "mobile resolve_park_id fallback + PGlite suite",
+      "maintenance path to restore a source_withdrawn park",
+      "commit/push"
+    ],
+    "production_write": false,
+    "committed": true,
+    "commits": [
+      "82cec3c feat(db): add canonical park lifecycle schema",
+      "2c7ca73 feat(data): add transactional canonical release importer",
+      "docs(data): checkpoint canonical release infrastructure"
     ]
   }
 }

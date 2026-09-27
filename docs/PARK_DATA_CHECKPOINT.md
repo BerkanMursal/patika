@@ -1468,3 +1468,107 @@ Production DB requirements (NOT implemented, no migration): see the progress.jso
 ## Release Candidate Committed (2026-09-27)
 Validation before commit: `node --check` OK on all 12 new/modified .mjs; all 3 JSON files parse; `scripts/test-scoped-serial-identity.mjs` passes; the frozen-RC verifier reproduces canonical 26,405 / review 413 / OSM-backed 24,750, all invariants 0, manifest 66 (33 aliases + 33 tombstones). Committed on `main` on top of `03e2d08`: `e4c2ea2` feat(data): add physical park consolidation and review resolution; `23e0864` feat(data): add physical park taxonomy gate and RC verification; then this docs commit "docs(data): freeze nationwide park registry release candidate". Pushed to origin/main. Nothing generated is committed (`.cache/` is gitignored). No DB writes, no migration, production canonical 26,433 / backlog 615 untouched.
 **Next exact step**: design the alias/tombstone DB migration + apply plan (requirements in progress.json `release_candidate_freeze.production_db_requirements`), only on explicit instruction.
+
+## Milestone: Production Canonical Lifecycle Schema (2026-09-27, in progress)
+Phase `production_canonical_lifecycle_schema`. HEAD = origin/main = `c77f293`. Frozen RC (NOT regenerated or changed): canonical 26,405 / review 413 / OSM-backed 24,750; 66 retired ids = 33 aliases + 33 tombstones (30 taxonomy_review + 3 non_park). Production canonical still 26,433 / backlog 615; no DB migration or import yet. Scope: lifecycle SCHEMA only (canonical_park_aliases, canonical_park_tombstones, resolve_park_id, needed constraints/triggers) + dependency inventory + FK/source-ref migration strategy + RC manifest contract + idempotent apply design; local Supabase test only; no production write, no RC data import, no commit/push.
+**First action**: inventory every reference to parks.id across `supabase/migrations/*.sql` (FKs, RPCs, views, functions, policies) and app/mobile lookup paths, before writing any migration.
+
+### Production canonical lifecycle schema — DONE (2026-09-27, local only) — STOPPED
+Dependency inventory, taken from the migrations and the live local catalog: 6 direct FKs to parks.id:
+- `feeding_points` CASCADE (note the general point has `id = park id`)
+- `feeding_events` NO ACTION
+- `favorites` CASCADE
+- `reports` CASCADE
+- `park_name_suggestions` CASCADE
+- `park_source_refs` CASCADE
+
+Indirect FKs: `observations` and `feeding_events.point_id`, both to `feeding_points`. Dependent objects: 11 RPCs, the view `park_summaries`, and 3 policies. Deep links go `patika://park/:id` to `get_park`. Full detail is in the NEW `docs/CANONICAL_PARK_LIFECYCLE.md`.
+
+Key facts:
+- The nationwide RC was never imported anywhere. The local DB holds only the 1,981 İzmir parks, and 1,978 of them are in the RC.
+- The 3 DB-only parks are 2 smoke-test fixtures and OSM `way/600671941`, which has vanished from the snapshot and has 1 feeding event.
+- None of the 66 retired ids exist in the DB.
+
+NEW migration `supabase/migrations/202609270001_canonical_park_lifecycle.sql` (schema only, no RC data):
+- Tables: `canonical_park_releases`, `canonical_park_aliases`, `canonical_park_tombstones` (`taxonomy_review`|`non_park`), `canonical_park_tombstone_refs`.
+- Deferred integrity triggers that re-read the current state: no overlap, survivor live, no chains or cycles, retired id not active, a source ref held by a live park OR a tombstone.
+- Immutability unless `patika.lifecycle_maintenance='on'`.
+- A `parks` guard so a retired id can never become active again.
+- `resolve_park_id(uuid)` returning `live` / `alias` / `tombstone` / `inactive` / `not_found`, callable by anon and authenticated.
+- Retired ids are not FKs, because a release may retire ids that were never materialised. Retired rows that do exist stay in `parks` with `active=false`, and nothing is hard-deleted.
+
+Implementation bug found and fixed during testing: deferred row triggers evaluated the NEW tuple as queued at event time, which was stale, so they now re-read the current rows.
+
+Applied to the LOCAL Docker DB only (`supabase_db_patika`) and recorded in the local migration history. NEW test `supabase/tests/canonical_park_lifecycle.test.sql` runs in one transaction and rolls back: **40/40 PASS**. Covered:
+- resolution: live, alias (existing and never-materialised ids), tombstone, inactive, not_found, null input
+- rejections: self alias, duplicate retired id, overlap both ways, missing survivor, inactive survivor, chain, retiring a survivor without flattening, a cycle, retiring an active park, reactivation, re-importing a retired id, an unregistered release
+- source refs: cross-holder refs both ways, a duplicate ref, a ref moved to the survivor
+- immutability: update, delete and truncate blocked; hard delete of a survivor blocked
+- a positive flattening scenario
+- regression: `get_park` and `get_parks` for live and retired ids, anon access to `resolve_park_id`, lifecycle tables not readable by clients
+
+After the test the fixtures are gone, local parks and refs are still 1,981 / 2,872, and the existing importer dry-run is unchanged. The frozen RC was re-verified unchanged: 26,405 / 413 / 24,750, 66 entries (33 aliases, 30 taxonomy_review, 3 non_park), all invariants 0. Frozen hashes are recorded in `progress.json`.
+
+Blockers before the RC import (doc §10):
+1. read-only inventory of the production DB state
+2. decisions for DB-only parks (a source-withdrawn OSM park would need a new tombstone status or to stay live)
+3. no DB table for the 413 review records and the non-park ledger
+4. a single-transaction SQL importer is not written yet
+5. the release bundle (§8) has not been exported and frozen
+6. the migration is not yet in the PGlite test suite
+7. the client does not call `resolve_park_id` yet
+
+**Next exact step**: on instruction, build and freeze the release bundle (§8), then a read-only production inventory. No production write, no RC import, no commit or push.
+
+## Milestone: Lifecycle Completion + RC Bundle/Applier (2026-09-27, in progress)
+Scope: a read-only production inventory if access exists; a DB-only park policy (generic `source_withdrawn`); persisted review and rejection tables; a frozen bundle exporter and validator; a single-transaction idempotent importer; a full LOCAL apply plus a re-apply no-op test. NO production write, no mobile changes, no commit or push. The frozen RC is unchanged (26,405 / 413 / 24,750 / 33 aliases / 33 tombstones).
+**First action**: check whether production DB credentials exist, without guessing.
+
+### Lifecycle completion + RC bundle/applier — DONE (2026-09-27, LOCAL ONLY) — STOPPED
+- **Production inventory: UNAVAILABLE.** No credentials exist: `mobile/.env.local` points to local `127.0.0.1:54321`, there is no supabase link or project ref, and no DB URL is set. Nothing was guessed and nothing touched production.
+- **Correction:** the earlier claim that OSM `way/600671941` has a feeding event was wrong. The single local event belongs to smoke fixture `a0000000-…001`.
+- **DB-only parks, classified generically by evidence:**
+  - `a0000000-…001` Smoke Test Parkı → TEST_FIXTURE (event and observation by `@example.com` smoke accounts)
+  - `a0000000-…002` Güllük Parkı → TEST_FIXTURE
+  - `d6f93406-…` OSM `way/600671941` → SOURCE_WITHDRAWN_NO_HISTORY (becomes a `source_withdrawn` tombstone; row kept inactive; OSM ref moved to tombstone refs)
+  - The environment policy is `data/canonical-releases/environments/local.json`.
+- **Migration `202609270001`**, rewritten in place (it had only been applied to the disposable local DB and was never committed or pushed): adds the `source_withdrawn` status, `canonical_park_reviews`, `canonical_park_rejections`, and a one-holder rule across live, tombstone, open-review and rejection refs. Lifecycle tests: 49/49 PASS.
+- **Frozen bundle:**
+  - Config `data/canonical-releases/patika-parks-2026-09-27-rc1.json` (source hashes, counts, pinned manifest hash).
+  - Exporter `scripts/export-canonical-release-bundle.mjs` is byte-reproducible.
+  - Validator `scripts/canonical-release-bundle.mjs`.
+  - Bundle `.cache/releases/patika-parks-2026-09-27-rc1/`, manifest sha256 `b03bea54af0b8bdfbbdce5208407fffc4bd441a273c532379ac68ff86f3ac88a`.
+  - Contents: parks 26,405 (24,750 OSM), refs 27,944, aliases 33, tombstones 33 (30 + 3; 33 refs), reviews 413 (383 + 30), rejections 5.
+- **Importer** `scripts/apply-canonical-release.mjs` + `scripts/sql/apply-canonical-release.sql`: one psql transaction, advisory lock, refuses non-local targets without `--allow-remote`. The full step list is in `docs/CANONICAL_PARK_LIFECYCLE.md` §11.
+- **Bugs found and fixed during local testing:**
+  - The baseline check wrongly rejected refs that the release keeps both as tombstone refs and as review/rejection items. The simulated legacy base exposed this; it would have blocked any DB that already holds the base.
+  - A PL/pgSQL variable/alias name collision in the invariant block.
+- **Local end-to-end test** `scripts/test-apply-canonical-release-local.mjs`: **35/35 PASS**. The local DB was restored byte-identically afterwards (1,981 / 2,872).
+  - Plain baseline (dry run): 26,408 parks; 26,407 active (26,405 release + 2 fixtures); 1 inactive (source_withdrawn); 33 aliases; 34 tombstones; 34 tombstone refs; 413 reviews; 5 rejections; 27,944 refs.
+  - Seeded legacy-base apply: 26,407 active, 5 inactive. Events, custom points, observations, favorites (deduplicated), suggestions and reports all verified.
+  - Negative tests all left the DB byte-identical: corrupt artifact, modified manifest, late injected failure, tombstone with history, unknown DB-only park.
+  - Second run: NO-OP with an identical fingerprint. A forced re-run is rolled back by the in-transaction guard.
+- **Frozen RC** re-verified unchanged: 26,405 / 413 / 24,750, all invariants 0.
+- **Remaining blockers before a PRODUCTION apply:**
+  1. production credentials and a read-only inventory, which supply `expected_db_state` and the production DB-only policy file
+  2. apply the migration to production (explicit approval)
+  3. the mobile deep-link fallback to `resolve_park_id` and the PGlite suite are still pending
+  4. restoring a `source_withdrawn` park later (for example an OSM re-add under the same deterministic id) needs an explicit maintenance path; a retired id cannot become active again
+  5. commit and push
+**Next exact step**: on explicit instruction, commit this milestone, then run a production read-only inventory with credentials. No production write.
+
+### Canonical release infrastructure COMMITTED (2026-09-27)
+Validation before commit:
+- `node --check` passes on all 4 new .mjs files; the 3 JSON files parse.
+- The bundle validates against the pinned manifest `b03bea54…c88a`, and a re-export is byte-identical.
+- Counts: parks 26,405, OSM 24,750, refs 27,944, aliases 33, tombstones 33, reviews 413, rejections 5.
+- Lifecycle SQL tests: 49/49.
+- Local end-to-end test: 35/35. Second apply = 0 changed rows, and the local DB was restored byte-identically.
+
+Commits on `main` on top of `c77f293`:
+- `82cec3c` feat(db): add canonical park lifecycle schema
+- `2c7ca73` feat(data): add transactional canonical release importer
+- this docs commit
+
+Pushed to origin/main. Not committed: the generated bundle (`.cache/releases/`, gitignored and reproducible from the exporter) and local DB dumps (never written to the repo). NO production DB write, NO production migration, NO RC production import.
+**Next exact step**: only on explicit instruction and with credentials, run a read-only production inventory and write a production DB-only policy file.
