@@ -1,0 +1,24 @@
+{
+  "_note": "Thresholds for scripts/consolidate-polygon-source-physical-parks.mjs, derived from the empirical same-name boundary-gap distribution of Ordu (see docs/PARK_DATA_CHECKPOINT.md, 'Ordu consolidation - stages 1-2'): dense fragment mode <= ~13 m, per-5m pair density reaches a flat background by 30-40 m. Source-agnostic; per-source entries only name the raw attribute that carries source-side layer evidence.",
+  "link_gap_m": 20,
+  "generic_link_gap_m": 5,
+  "gray_zone_max_m": 40,
+  "different_name_overlap_ambiguity_fraction": 0.5,
+  "district_name_similarity": 0.8,
+  "non_park_keywords": "bisiklet|otopark|otopak|kav[sş]ak|ref[uü]j|mezarl[ıi]k|cami\\b|okul",
+  "sources": { "ordu_acikveri_parklari": { "layer_field": "KATMAN", "dataset_scope": "park_or_green_space", "dataset_description": "Ordu Büyükşehir Belediyesi Parkları ve Yeşil alanları (CKAN notes of dataset 52-ordu-buyuksehir-parklari; tags Park, Yeşil Alanlar)" } },
+  "taxonomy_gate": {
+    "_note": "Generic PARK-taxonomy gate for physical-park clusters (scripts/physical-park-taxonomy-gate.mjs). Clustering decides WHICH polygons form one physical object; this gate decides whether that object is a PARK. Row-level semantic signals: (a) park word in the NAME (word or compound ending, minus non-green compounds), (b) park token in the source LAYER field. The dataset-level scope ('parks AND green areas') never suffices alone. 2 row-level signals = PARK_CONFIRMED, 1 = PARK_LIKELY, 0 = TAXONOMY_AMBIGUOUS; a facility name without a park word = TAXONOMY_AMBIGUOUS; a non-park keyword (layer or name) without a park word = NON_PARK. PATH-LIKE geometry (linear AND narrow) downgrades one level. A cluster-level signal holds when >= member_signal_fraction of its members carry it. Path thresholds calibrated on the source's own labelled path layers (bicycle layers: mean width 3.3-6.2 m) vs the narrowest park-named coastal strip (10.3 m); linear = area/length^2 < linear_max_compactness (length >= 100x mean width).",
+    "member_signal_fraction": 0.5,
+    "layer_park_pattern": "prk|park",
+    "name_park_compound_pattern": "park(lar)?[ıi]?$",
+    "non_green_park_compounds": ["otopark", "otopak", "lunapark", "teknopark", "teknoloji", "karavan", "hayvanat"],
+    "facility_tokens": ["müze", "müzesi", "merkez", "merkezi", "yerleşke", "yerleşkesi", "kilise", "cami", "camii", "okul", "kort", "kortu", "stadyum", "stadı", "hastane", "çöplük", "tesis", "tesisi", "lojman"],
+    "green_space_tokens": ["çamlık", "bahçe", "bahçesi", "mesire", "koru", "orman", "yeşil", "ağaçlandırma", "rekreasyon"],
+    "linear_max_compactness": 0.01,
+    "path_max_mean_width_m": 8,
+    "linear_downgrades_single_signal": true,
+    "_linear_single_signal_note": "Added 2026-09-27 after the full PARK_LIKELY audit: Civil 2 ETAP #91 (layer-only evidence, 957 m x 8.2 m, compactness 0.0086) is one of two parallel verge bands around a road corridor whose twin #92 (5.7 m) was already path-like; the 8 m width cut was calibrated against a TWO-signal park strip and does not protect layer-only evidence. Linear threshold itself unchanged.",
+    "sub_park_scale_member_area_m2": 50
+  }
+}

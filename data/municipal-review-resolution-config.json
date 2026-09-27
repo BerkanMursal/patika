@@ -1,0 +1,46 @@
+{
+ "_note": "Thresholds and per-source evidence fields for scripts/resolve-municipal-review-backlog.mjs. Thresholds are distances in metres and are shared by every source; per-source entries only name raw attribute fields that carry source-side textual evidence (never used as ids). Geometry type, id/name fields and taxonomy come from data/municipal-ingestion-configs.json. name_based_non_green_tokens: for sources whose PARK evidence is only the record name (no taxonomy column), a name containing one of these tokens (compounds like technology park / car park) is NOT trustworthy park evidence.",
+ "thresholds": {
+  "very_close_m": 30,
+  "adjacent_m": 15,
+  "extended_m": 250,
+  "identical_point_m": 2,
+  "fragment_gap_m": 30,
+  "namesake_ambiguous_gap_m": 150,
+  "partial_name_max_m": 100
+ },
+ "non_park_keywords": "bisiklet|otopark|kav[sş]ak|ref[uü]j|mezarl[ıi]k|cami\\b|okul",
+ "sources": {
+  "konya_acikveri_parklar": {
+   "evidence_text_fields": [
+    "ALT_NITELIK_ADI",
+    "UST_NITELIK_ADI"
+   ]
+  },
+  "ordu_acikveri_parklari": {
+   "evidence_text_fields": [
+    "KATMAN"
+   ]
+  },
+  "trabzon_acikveri_parklar": {
+   "evidence_text_fields": []
+  },
+  "kayseri_kocasinan_park_ve_bahceler": {
+   "evidence_text_fields": []
+  },
+  "van_buyuksehir_parklar": {
+   "evidence_text_fields": [
+    "ACIKLAMA"
+   ]
+  }
+ },
+ "name_based_non_green_tokens": [
+  "teknoloji",
+  "teknopark",
+  "otopark",
+  "otopak",
+  "karavan",
+  "hayvanat",
+  "lunapark"
+ ]
+}

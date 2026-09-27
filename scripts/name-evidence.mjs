@@ -4,7 +4,7 @@ import { clean, nameKey } from "./park-enrichment.mjs";
 // review guard and the near-duplicate audit. Purely a REVIEW signal — never
 // used to auto-match.
 
-const WEAK_TOKENS = new Set([
+export const WEAK_TOKENS = new Set([
   "park", "parki", "parklar", "parklari", "cocuk", "kent", "mahalle", "semt", "belediye", "belediyesi",
   "yesil", "alan", "alani", "oyun", "grubu", "isimsiz", "sokak", "sokagi", "meydan", "meydani",
   "aile", "dinlenme", "spor", "mesire", "bahce", "bahcesi"
