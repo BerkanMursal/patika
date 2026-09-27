@@ -1,0 +1,30 @@
+{
+  "_note": "Frozen expectations for canonical release patika-parks-2026-09-27-rc1 (the frozen RC committed in c77f293). scripts/export-canonical-release-bundle.mjs refuses to export unless every source artifact hash and every count matches; scripts/apply-canonical-release.mjs refuses to apply a bundle whose manifest sha256 differs from expected_manifest_sha256. Nothing in this file is recomputed from matching/taxonomy logic.",
+  "release_id": "patika-parks-2026-09-27-rc1",
+  "created_at": "2026-09-27T00:00:00.000Z",
+  "required_schema_migration": "202609270001",
+  "source_artifacts": {
+    "base_snapshot": { "path": "data/park-enrichment/.cache/nationwide-canonical-preview.json", "sha256": "46e485f2ef7c6890d9df539b9ab495a36ddc82bbe69674ca7ebe2889a137d30a" },
+    "base_review_backlog": { "path": "data/park-enrichment/.cache/municipal-review-backlog.json", "sha256": "88fa1ad2934fb8e14288fd78cdc220521a24d2fed27a64c9c648dabe238a4ab7" },
+    "final_canonical_preview": { "path": "data/park-enrichment/.cache/ordu-consolidation/final/final-canonical-preview.json", "sha256": "d79bebe411fb899fabb1d12ac2e428b16dd82815f636d74ddc1e706709638eb8" },
+    "canonical_alias_manifest": { "path": "data/park-enrichment/.cache/ordu-consolidation/final/canonical-alias-manifest.json", "sha256": "4c382fb4f1d6569331c2de07fb72cf0c7b5020e02cd004cf8120df10008448f6" },
+    "taxonomy_review_queue": { "path": "data/park-enrichment/.cache/ordu-consolidation/final/taxonomy-review-queue.json", "sha256": "795fd3bf0fa733986e9c20e7385348929ac58d1c5fa8a2cec0ff8e9acfef895b" },
+    "review_resolution": { "path": "data/park-enrichment/.cache/ordu-consolidation/final/review-resolution/resolution.json", "sha256": "6184356f73a76594e9836d850987ce8df924da9f30e65100990a55beac0b94d9" },
+    "park_details": { "path": "mobile/src/core/park-details.json", "sha256": "999c422d586054999850fdf7020d62cbbc5d6f072ad8264b2670ff47d81d6ff9" }
+  },
+  "expected_counts": {
+    "parks": 26405,
+    "osm_backed_parks": 24750,
+    "park_source_refs": 27944,
+    "aliases": 33,
+    "tombstones": 33,
+    "tombstones_taxonomy_review": 30,
+    "tombstones_non_park": 3,
+    "tombstone_refs": 33,
+    "reviews": 413,
+    "reviews_keep_review": 383,
+    "reviews_taxonomy": 30,
+    "rejections": 5
+  },
+  "expected_manifest_sha256": "b03bea54af0b8bdfbbdce5208407fffc4bd441a273c532379ac68ff86f3ac88a"
+}

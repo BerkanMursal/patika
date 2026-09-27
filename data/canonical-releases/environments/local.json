@@ -1,0 +1,15 @@
+{
+  "_note": "Environment policy for the LOCAL Supabase database only. Lists DB-only parks that are test fixtures, with the evidence that established it. Listing alone is not enough: apply-canonical-release.mjs re-checks generically that a listed fixture has NO provenance (no osm_id, no park_source_refs) and that every author of content attached to it uses a reserved test-domain account (RFC 2606/6761: example.com/.net/.org, .test, .invalid, .localhost, .example). A listed id that fails those checks, or any DB-only park that is neither source-withdrawn nor a verified fixture, aborts the release. Production needs its own policy file built from a read-only inventory.",
+  "environment": "local",
+  "fixtures": [
+    {
+      "park_id": "a0000000-0000-4000-8000-000000000001",
+      "evidence": "'Smoke Test Parkı'; hand-made sequential UUID series (a0000000-…-00000000000N, same series as its feeding points c0000000-… and feeding event d0000000-…); source='OpenStreetMap' but osm_id NULL and no park_source_refs (every importer sets osm_id + an osm ref); inserted 2026-09-18 11:08:11, three days before the first importer run (2026-09-21); its feeding event (note 'smoke test') and observation were written by smokealice@example.com / smokebob@example.com."
+    },
+    {
+      "park_id": "a0000000-0000-4000-8000-000000000002",
+      "evidence": "Same fabricated sequential UUID series as the smoke park and inserted in the same session 32 s later (2026-09-18 11:08:43); source='OpenStreetMap' but osm_id NULL, no park_source_refs and no general feeding point (every imported park gets one); no user content."
+    }
+  ],
+  "tombstone_user_content_ack": []
+}
