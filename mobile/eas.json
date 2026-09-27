@@ -3,7 +3,11 @@
   "build": {
     "development": { "developmentClient": true, "distribution": "internal" },
     "preview": { "distribution": "internal", "android": { "buildType": "apk" } },
-    "production": { "autoIncrement": true, "env": { "PATIKA_RELEASE": "1" } }
+    "production": {
+      "autoIncrement": true,
+      "environment": "production",
+      "env": { "PATIKA_RELEASE": "1" }
+    }
   },
   "submit": { "production": {} }
 }
