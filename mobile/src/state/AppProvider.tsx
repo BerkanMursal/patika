@@ -8,6 +8,11 @@ import { demoData } from '../core/demo';
 import { mergeFeeding, validateFeeding } from '../core/domain';
 import { presentPark, restoreParkActivity } from '../core/park-names';
 import { lookupPark, type ParkLookup } from '../core/park-lifecycle';
+import {
+  completeQueuedFeeding,
+  failQueuedFeeding,
+  submitQueuedFeeding,
+} from '../core/offline-queue';
 import { persistPhoto, removeLocalPhoto } from '../services/photos';
 import type { Feeding, FeedingDraft, Park, Pending, Point, Region, Viewer } from '../core/types';
 
@@ -220,7 +225,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (viewerRef.current?.id !== user.id) break;
         if (item.user_id !== user.id) continue;
         try {
-          if (configured) await api.submitFeeding(item);
+          // resolves merged/retired parks first; the stored item is only changed below
+          if (configured)
+            await submitQueuedFeeding(item, { resolvePark, submit: api.submitFeeding });
           else if (!eventsRef.current.some((e) => e.id === item.id)) {
             const next = [
               { ...item, author_name: user.name, photo_path: '', photo_url: item.photo_uri },
@@ -230,26 +237,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             setEvents(next);
             setParks((all) => mergeFeeding(all, item));
           }
-          await writeQueue((items) => items.filter((q) => q.id !== item.id), user.id);
+          await writeQueue((items) => completeQueuedFeeding(items, item.id), user.id);
           if (configured) removeLocalPhoto(item.photo_uri);
         } catch (e) {
-          await writeQueue(
-            (items) =>
-              items.map((q) =>
-                q.id === item.id
-                  ? {
-                      ...q,
-                      status: 'error' as const,
-                      attempts: q.attempts + 1,
-                      error:
-                        e instanceof Error
-                          ? e.message
-                          : 'Gönderilemedi. Bağlantıyı kontrol ederek tekrar deneyin.',
-                    }
-                  : q,
-              ),
-            user.id,
-          );
+          await writeQueue((items) => failQueuedFeeding(items, item.id, e), user.id);
         }
       }
       if (configured) await refresh();

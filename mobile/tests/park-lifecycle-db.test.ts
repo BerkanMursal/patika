@@ -4,7 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { unaccent } from '@electric-sql/pglite/contrib/unaccent';
 import { lookupPark, parkRouteAction, type ResolveRow } from '../src/core/park-lifecycle';
-import type { Park } from '../src/core/types';
+import { submitQueuedFeeding } from '../src/core/offline-queue';
+import type { FeedingDraft, Park } from '../src/core/types';
 
 // Fresh PGlite database with the migration chain the park lifecycle depends on
 // (core schema, park names, park_source_refs, lifecycle). Same PostGIS stripping as
@@ -35,6 +36,14 @@ async function database() {
       .replace('create index parks_location on public.parks using gist(location);', ''),
   );
   await db.exec(await migration('202609130002_park_names.sql'));
+  // production submit_feeding (location check + points) for the offline-queue cases
+  for (const m of [
+    '202609170001_location_verification.sql',
+    '202609170002_points.sql',
+    '202609170003_my_points.sql',
+    '202609170004_points_integrity.sql',
+  ])
+    await db.exec(await migration(m));
   await db.exec(await migration('202609180009_park_source_refs.sql'));
   await db.exec(await migration('202609270001_canonical_park_lifecycle.sql'));
   return db;
@@ -113,6 +122,73 @@ test('lifecycle migration on a fresh chain + client resolver against the real RP
         assert.equal(a.type === 'unavailable' && a.message.title, title);
       });
     }
+    await t.test(
+      'offline queue: a feeding queued for a merged park is accepted after remapping',
+      async () => {
+        const U = '50000000-0000-4000-8000-000000000001',
+          A2 = '20000000-0000-4000-8000-0000000000a2',
+          B2 = '20000000-0000-4000-8000-0000000000b2',
+          C2 = '20000000-0000-4000-8000-0000000000c2';
+        // state after a release merged A2 into B2: A2's general point kept inactive, custom point
+        // C2 re-parented to B2 (see scripts/sql/apply-canonical-release.sql, alias step)
+        await db.exec(`
+        insert into auth.users(id) values ('${U}');
+        insert into public.parks(id, name, city, latitude, longitude, active) values
+          ('${A2}', 'Eski Parça 2', 'Ordu', 40.9801, 37.8701, false),
+          ('${B2}', 'Birleşen Park 2', 'Ordu', 40.9802, 37.8702, true);
+        insert into public.feeding_points(id, park_id, name, latitude, longitude, active) values
+          ('${A2}', '${A2}', 'Park içi genel nokta', 40.9801, 37.8701, false),
+          ('${B2}', '${B2}', 'Park içi genel nokta', 40.9802, 37.8702, true),
+          ('${C2}', '${B2}', 'Kuzey kapı noktası', 40.9803, 37.8703, true);
+        insert into public.canonical_park_aliases(retired_park_id, canonical_park_id, reason, release_id)
+          values ('${A2}', '${B2}', 'fragment', 'mobile-test');`);
+        await db.query("select set_config('request.jwt.claim.sub', $1, false)", [U]);
+        const submitted: string[] = [];
+        const submit = async (draft: FeedingDraft) => {
+          const { photo_uri, ...payload } = draft; // same shape as repository.submitFeeding
+          const photo_path = `${U}/${draft.id}.jpg`;
+          await db.query(
+            "insert into storage.objects(bucket_id, name, owner_id) values ('feeding-photos', $1, $2) on conflict (name) do nothing",
+            [photo_path, U],
+          );
+          const r = await db.query<{ id: string }>('select public.submit_feeding($1::jsonb) id', [
+            { ...payload, photo_path },
+          ]);
+          submitted.push(r.rows[0].id);
+        };
+        const queued = (id: string, point_id: string): FeedingDraft => ({
+          id,
+          user_id: U,
+          park_id: A2,
+          point_id,
+          park_name: 'Eski Parça 2',
+          food_type: 'dry',
+          food_grams: 150,
+          water_ml: 0,
+          note: '',
+          occurred_at: new Date().toISOString(),
+          photo_uri: 'file:///x.jpg',
+          reported_latitude: 40.9802,
+          reported_longitude: 37.8702,
+        });
+        const qDeps = { resolvePark: (id: string) => lookupPark(id, deps), submit };
+        // the un-remapped payload is what failed before this change
+        await assert.rejects(
+          submit(queued('60000000-0000-4000-8000-000000000000', A2)),
+          /Geçerli besleme noktası gerekli/,
+        );
+        await submitQueuedFeeding(queued('60000000-0000-4000-8000-000000000001', A2), qDeps);
+        await submitQueuedFeeding(queued('60000000-0000-4000-8000-000000000002', C2), qDeps);
+        const rows = await db.query<{ id: string; park_id: string; point_id: string }>(
+          "select id, park_id, point_id from public.feeding_events where id::text like '60000000%' order by id",
+        );
+        assert.deepEqual(rows.rows, [
+          { id: '60000000-0000-4000-8000-000000000001', park_id: B2, point_id: B2 },
+          { id: '60000000-0000-4000-8000-000000000002', park_id: B2, point_id: C2 },
+        ]);
+        await db.query("select set_config('request.jwt.claim.sub', '', false)");
+      },
+    );
     await t.test('anon (deep links before sign-in) may call resolve_park_id', async () => {
       await db.exec('set role anon');
       try {
