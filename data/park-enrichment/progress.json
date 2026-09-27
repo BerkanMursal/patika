@@ -1,7 +1,7 @@
 {
   "version": 1,
   "goal": "Build the most complete, licensed, deterministic-identity canonical Turkey park registry (OSM + official municipal sources + future nationwide gap sources), served to the mobile app via Supabase/PostGIS viewport queries rather than a bundled JSON. This session: integrate real municipal adapters one source at a time, checkpoint after each.",
-  "phase": "blocked_source_recovery_done",
+  "phase": "release_candidate_frozen_committed",
   "current_source": null,
   "completed_sources": [
     {
@@ -354,8 +354,8 @@
     "scripts/run-ulasav-full-classification.mjs",
     "data/park-enrichment/.cache/ulasav/full-classification.json (gitignored, final result)"
   ],
-  "last_successful_command": "node scripts/run-ulasav-full-classification.mjs (3rd run, after fixing zip-extraction and taxonomy-fallback bugs) -> 71/71 inspected: 3 READY_FOR_RECONCILIATION (Kayseri-Kocasinan, Van, Trabzon-already-integrated), 1 READY_AFTER_SMALL_PARSER (Bursa, known non-park data), 45 BLOCKED_IDENTITY, 14 BLOCKED_LICENSE, 2 BLOCKED_CRS, 1 BLOCKED_SCHEMA, 5 DOWNLOAD_FAILED. Van regression fixture passed exactly.",
-  "next_step": "Recovery sweep DONE, STOPPED. 0 new READY sources. BLOCKED_CRS 2/2 root-caused (parser gap; axis-swapped CSV), DOWNLOAD_FAILED 5: 2 parser-recovered, 3 unrecoverable (dead domain, host down, empty KMZ). Inspector fixed (classifier false negatives x2, false-positive CC-BY pattern for 40 datasets). Uncommitted: scripts/inspect-ulasav-full.mjs, scripts/run-ulasav-full-classification.mjs, data/ulasav-recovery-overrides.json. Canonical 26,433 / backlog 615 untouched.",
+  "last_successful_command": "node scripts/verify-consolidation-release-candidate.mjs -> all invariants 0; canonical 26,405; backlog 413; manifest 66 clean",
+  "next_step": "Frozen RC (26,405 canonical / 413 review / 24,750 OSM) committed and pushed to origin/main. Next, only on explicit instruction: alias/tombstone DB migration + apply plan. Production canonical 26,433 / backlog 615 untouched; no DB writes.",
   "blockers": [
     {
       "id": "balikesir_no_stable_id",
@@ -601,7 +601,7 @@
       "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Generic Config-Driven Municipal Ingestion Framework' for the full report."
     }
   ],
-  "updated_at": "2026-09-24T20:56:12.983682Z",
+  "updated_at": "2026-09-27T14:47:11.954803Z",
   "overture_gap_analysis": {
     "stage": "gap_analysis_complete_not_merged_not_imported",
     "release": "2026-08-19.0",
@@ -1203,5 +1203,283 @@
       "total": 26433,
       "backlog": 615
     }
+  },
+  "starting_review_count": 615,
+  "review_backlog_resolution": {
+    "starting_review_count": 615,
+    "final_proposal": {
+      "MATCH_EXISTING": 161,
+      "NEW_CANONICAL_SAFE": 38,
+      "REJECT_DUPLICATE": 2,
+      "REJECT_NON_PARK": 1,
+      "KEEP_REVIEW": 413
+    },
+    "hypothetical_canonical": 26471,
+    "remaining_backlog": 413,
+    "by_source": {
+      "konya": [
+        134,
+        3,
+        0,
+        0,
+        276
+      ],
+      "ordu": [
+        3,
+        4,
+        0,
+        1,
+        106
+      ],
+      "trabzon": [
+        5,
+        0,
+        0,
+        0,
+        7
+      ],
+      "kayseri": [
+        11,
+        29,
+        2,
+        0,
+        13
+      ],
+      "van": [
+        8,
+        2,
+        0,
+        0,
+        11
+      ]
+    },
+    "ordu_accepted_fragments": 65,
+    "sample_audit": {
+      "seed": 20260925,
+      "automated_issues": 0
+    },
+    "artifacts": "data/park-enrichment/.cache/review-resolution/"
+  },
+  "ordu_consolidation": {
+    "date": "2026-09-25",
+    "records": {
+      "raw": 210,
+      "usable": 208,
+      "matched_osm": 10,
+      "accepted_municipal": 84,
+      "review": 114
+    },
+    "components": 75,
+    "confident_multi_record_clusters": 23,
+    "standalone": 52,
+    "ambiguous_groups": 6,
+    "municipal_only": {
+      "before": 84,
+      "after_consolidation": 26,
+      "after_review_resolution": 30
+    },
+    "retired_canonicals": 58,
+    "refs": {
+      "before": 94,
+      "after_consolidation": 94,
+      "after_review_resolution": 126
+    },
+    "canonical": {
+      "before": 26433,
+      "after_consolidation": 26375,
+      "hypothetical_after_review_resolution": 26413
+    },
+    "review_resolution_on_corrected_baseline": {
+      "MATCH_EXISTING": 164,
+      "NEW_CANONICAL_SAFE": 38,
+      "REJECT_DUPLICATE": 28,
+      "REJECT_NON_PARK": 1,
+      "KEEP_REVIEW": 384
+    },
+    "review_resolution_on_current_baseline_refined_rules": {
+      "MATCH_EXISTING": 164,
+      "NEW_CANONICAL_SAFE": 38,
+      "REJECT_DUPLICATE": 5,
+      "REJECT_NON_PARK": 1,
+      "KEEP_REVIEW": 407,
+      "hypothetical": 26471
+    },
+    "thresholds": {
+      "link_gap_m": 20,
+      "generic_link_gap_m": 5,
+      "gray_zone_max_m": 40
+    },
+    "artifacts": "data/park-enrichment/.cache/ordu-consolidation/"
+  },
+  "ordu_consolidation_finalization": {
+    "date": "2026-09-27",
+    "outputs": "data/park-enrichment/.cache/ordu-consolidation/final/",
+    "taxonomy": {
+      "clusters": {
+        "PARK_CONFIRMED": 43,
+        "PARK_LIKELY": 17,
+        "TAXONOMY_AMBIGUOUS": 10,
+        "NON_PARK": 5
+      },
+      "records": {
+        "PARK_CONFIRMED": 147,
+        "PARK_LIKELY": 19,
+        "TAXONOMY_AMBIGUOUS": 37,
+        "NON_PARK": 5
+      },
+      "gated_municipal_canonicals": {
+        "to_review": [
+          "Perşembe Yaylası (24 polygons)",
+          "Melet Adaları (3)",
+          "Ünye Çöplük Ağaçlandırma",
+          "OBB Durugöl Yerleşkesi"
+        ],
+        "non_park": [
+          "Perşembe Bisiklet",
+          "Ünye Bisiklet",
+          "Ünye Bisiklet"
+        ]
+      }
+    },
+    "ordu": {
+      "raw": 210,
+      "usable": 208,
+      "components": 75,
+      "multi_record_clusters": 23,
+      "standalone": 52,
+      "ambiguous_groups": 6,
+      "municipal_only": {
+        "before": 84,
+        "after_consolidation": 26,
+        "after_gate": 19,
+        "after_review_resolution": 23
+      },
+      "refs": {
+        "before": 94,
+        "canonical_after": 94,
+        "preserved_in_canonical": 62,
+        "attached_by_review": 32,
+        "taxonomy_review_queue": 29,
+        "non_park_ledger": 3,
+        "lost": 0
+      }
+    },
+    "alias_manifest": {
+      "entries": 65,
+      "ALIAS_REDIRECT": 33,
+      "TOMBSTONE_TAXONOMY_REVIEW": 29,
+      "TOMBSTONE_NON_PARK": 3,
+      "consolidation_retired_covered": 58,
+      "duplicate": 0,
+      "self": 0,
+      "missing_survivor": 0,
+      "cycles": 0,
+      "chains": 0
+    },
+    "review_resolution": {
+      "MATCH_EXISTING": 164,
+      "NEW_CANONICAL_SAFE": 38,
+      "REJECT_DUPLICATE": 28,
+      "REJECT_NON_PARK": 2,
+      "KEEP_REVIEW": 383
+    },
+    "final_hypothetical": {
+      "canonical": 26406,
+      "review_backlog_records": 412,
+      "keep_review": 383,
+      "taxonomy_review_records": 29
+    },
+    "vs_previous_preview": {
+      "previous": [
+        26413,
+        384
+      ],
+      "canonical_delta": -7,
+      "backlog_delta": 28
+    },
+    "invariants_all_zero": true,
+    "osm_backed": 24750,
+    "files": [
+      "scripts/physical-park-taxonomy-gate.mjs",
+      "scripts/verify-consolidation-release-candidate.mjs",
+      "scripts/resolve-municipal-review-backlog.mjs (taxonomy_class)",
+      "data/physical-park-consolidation-config.json (taxonomy_gate)"
+    ],
+    "db_write": false,
+    "committed": false
+  },
+  "release_candidate_freeze": {
+    "date": "2026-09-27",
+    "preview": "data/park-enrichment/.cache/ordu-consolidation/final/final-canonical-preview.json",
+    "park_likely_audit": {
+      "audited": 17,
+      "LIKELY_ACCEPT": 16,
+      "SHOULD_BE_REVIEW": 1,
+      "SHOULD_BE_NON_PARK": 0,
+      "finding": "layer-only + linear geometry (Civil 2 ETAP #91, road-verge pair) -> generic rule taxonomy_gate.linear_downgrades_single_signal",
+      "facility_list": "unchanged",
+      "artifact": ".cache/ordu-consolidation/final/park-likely-audit.json"
+    },
+    "taxonomy": {
+      "PARK_CONFIRMED": 43,
+      "PARK_LIKELY": 16,
+      "TAXONOMY_AMBIGUOUS": 11,
+      "NON_PARK": 5
+    },
+    "canonical": 26405,
+    "review_backlog": 413,
+    "keep_review": 383,
+    "taxonomy_review_records": 30,
+    "taxonomy_review_clusters": 5,
+    "review_resolution": {
+      "MATCH_EXISTING": 164,
+      "NEW_CANONICAL_SAFE": 38,
+      "REJECT_DUPLICATE": 28,
+      "REJECT_NON_PARK": 2,
+      "KEEP_REVIEW": 383
+    },
+    "ordu": {
+      "canonicals_with_ordu_refs": 36,
+      "municipal_only": 22,
+      "osm_backed_with_ordu_refs": 14,
+      "refs_before": 94,
+      "refs_in_canonical_after": 93,
+      "preserved": 61,
+      "attached_by_review": 32,
+      "taxonomy_review_queue": 30,
+      "non_park_ledger": 3,
+      "lost": 0
+    },
+    "lifecycle": {
+      "entries": 66,
+      "ALIAS_REDIRECT": 33,
+      "TOMBSTONE_TAXONOMY_REVIEW": 30,
+      "TOMBSTONE_NON_PARK": 3,
+      "consolidation_retired": 58,
+      "gate_demoted": 8,
+      "refs_preserved": 66
+    },
+    "invariants_all_zero": true,
+    "osm_backed": 24750,
+    "production_db_requirements": [
+      "canonical_park_aliases(retired_park_id PK, canonical_park_id NOT NULL FK -> live parks, reason, source_code, cluster_id, created_at, effective_snapshot); CHECK retired_park_id <> canonical_park_id",
+      "canonical_park_tombstones(retired_park_id PK, status IN (taxonomy_review, non_park), reason, source_code, cluster_id, source_refs jsonb, created_at, effective_snapshot)",
+      "a retired id is in exactly one of aliases/tombstones and never in live parks (cross-table uniqueness enforced by trigger or a single lifecycle table with a kind column)",
+      "an alias target must be live and never itself retired: flatten at write time (re-point existing aliases when a survivor is later retired or tombstoned); no chains, no cycles",
+      "retire and alias in one transaction: move source_refs to the survivor, insert the alias, remove the live row; never hard-delete history",
+      "resolve_park_id(id) function/view: live -> itself; alias -> survivor; tombstone -> status (not 404) — used by favourites, reviews, check-ins, deep links and every table holding park ids",
+      "FKs from user-generated tables to parks must not CASCADE DELETE; migrate or resolve references to the survivor through the alias",
+      "source_refs unique (source_code, external_id) across live parks + tombstone refs + review queue; per-source ref-count conservation check in the apply script",
+      "demoted records re-enter the municipal review backlog with review_reason taxonomy_ambiguous_physical_park / taxonomy_non_park",
+      "OSM deterministic ids (sha256 patika-osm:osm_id) never retired by municipal consolidation (verified: 2 OSM survivors, 0 OSM retirees)",
+      "apply idempotently from the frozen manifest (snapshot sha256 check against the base preview) and re-run verify-consolidation-release-candidate before commit"
+    ],
+    "db_write": false,
+    "committed": true,
+    "commits": [
+      "e4c2ea2 feat(data): add physical park consolidation and review resolution",
+      "23e0864 feat(data): add physical park taxonomy gate and RC verification",
+      "docs(data): freeze nationwide park registry release candidate"
+    ]
   }
 }
