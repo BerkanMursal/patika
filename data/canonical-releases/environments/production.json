@@ -1,0 +1,6 @@
+{
+  "_note": "Environment policy for PRODUCTION (project gjrgxpecqztxajlkgqbz). Written for the first release, patika-parks-2026-09-27-rc1, after a read-only pre-write gate (2026-09-27) confirmed an empty production database: parks, park_source_refs, feeding_points, feeding_events, observations, favorites, park_name_suggestions, reports and every canonical_park_* table at 0 rows. With no production parks there are no DB-only parks, so there are no fixtures and no user-content acknowledgements. Any future DB-only park must be added here with explicit evidence before an import; the importer aborts on unclassified ones.",
+  "environment": "production",
+  "fixtures": [],
+  "tombstone_user_content_ack": []
+}
