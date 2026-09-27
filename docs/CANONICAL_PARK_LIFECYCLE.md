@@ -260,3 +260,40 @@ The runner uses the local Docker DB only and restores the pre-test baseline byte
 - **Simulated legacy base:** 6 of the release's own retired and survivor parks, seeded with events, a custom point, observations, favorites, suggestions and reports. Every content move and deduplication was verified.
 - **Negative tests, each leaving the DB byte-identical:** corrupted artifact; modified manifest; injected failure after all writes; tombstone with history and no acknowledgement; unknown DB-only park.
 - **Re-apply** is a NO-OP (identical fingerprint). A forced re-apply hits the in-transaction guard and rolls back.
+
+## 12. Production read-only inventory (tool ready; NOT run — no production access)
+
+As of 2026-09-27 there is **no production access** in this environment:
+- the repo is not linked to a Supabase project (no `supabase/.temp/project-ref`)
+- the only env file, `mobile/.env.local`, points to local `127.0.0.1:54321`
+- no DB or Supabase variables are set in the environment
+- no production values exist in `eas.json` / `app.config.ts`
+
+Nothing was guessed, and no shell history or secret stores were searched.
+
+### What you need to provide
+1. **A direct Postgres connection to the production database**: Supabase dashboard → Project Settings → Database → connection string (direct `db.<project-ref>.supabase.co:5432`, or the session pooler), with `sslmode=require`. The publishable/anon API key is **not** enough, because RLS hides most rows.
+2. **A role that can SELECT** `public.parks`, `park_source_refs`, `feeding_points`, `feeding_events`, `observations`, `favorites`, `park_name_suggestions`, `reports` and `supabase_migrations.schema_migrations`. A dedicated read-only role is preferred; you create it, the tool never does. The tool enforces read-only on any role regardless.
+3. **The password supplied out of band** via `PGPASSWORD`, `~/.pgpass` or a pg service file. Never put it on the command line; the tool never prints credentials.
+4. **A psql client.** None is installed on this host. Either install `postgresql-client`, or use the local container's psql purely as a client:
+   ```
+   export PGPASSWORD=...   # or ~/.pgpass
+   node scripts/inventory-production-readonly.mjs \
+     --psql='docker exec -i -e PGPASSWORD supabase_db_patika psql "host=db.<project-ref>.supabase.co port=5432 dbname=postgres user=<readonly-role> sslmode=require"'
+   ```
+
+### Safety model (`scripts/inventory-production-readonly.mjs`)
+- **Explicit target only.** There is no default and nothing is auto-linked. Obvious local hosts are refused, and a server-side preflight refuses loopback or socket connections, so a local psql binary used as a client for a remote host is still fine. `--allow-local` exists only for testing the tool.
+- **Read-only at every layer.** Each run sets `default_transaction_read_only = on`, uses `BEGIN TRANSACTION READ ONLY`, and always ends in `ROLLBACK`. The server rejects any write, even `CREATE TEMP TABLE` (verified). The SQL text is also statically rejected if it contains write or DDL keywords, and a server-confirmed read-only guard line is required before any result is accepted.
+- **Comparison happens in JS.** The bundle's RC ids and refs are compared locally, and only a short list of DB-only ids is sent back in a second read-only query.
+- **Outputs are gitignored:** `.cache/production-inventory/<timestamp>/`.
+  - `inventory.json` holds counts, suggestions and reports by status, migration and lifecycle schema state, the RC comparison (parks and refs), DB-only parks with provenance and user-history counts, and parks this release would retire.
+  - `proposed-environment-policy.json` holds a proposed action per DB-only park (`SOURCE_WITHDRAWN` or `MANUAL_REVIEW`; confirmed actions can be `KEEP_ACTIVE` / `KEEP_INACTIVE` / `SOURCE_WITHDRAWN` / `TEST_FIXTURE` / `MANUAL_REVIEW`), `confirmed: false`, `status: PROPOSAL_NOT_APPLIED`. `TEST_FIXTURE` is never proposed automatically.
+
+### Tested locally only
+With `--allow-local` against the local Docker DB:
+- results match the known local state: 1,981 parks, 1,978 in the RC, 3 DB-only, 2,871 of 2,872 refs on the same park
+- the local DB fingerprint was identical before and after (0 writes)
+- the preflight refused the same target without `--allow-local`
+
+**Note:** the importer currently understands only `fixtures` and `tombstone_user_content_ack` in an environment policy, and aborts on any unconfirmed DB-only park. Parks confirmed as `KEEP_ACTIVE` / `KEEP_INACTIVE` / `MANUAL_REVIEW` need importer support before a production apply. This is a known blocker.

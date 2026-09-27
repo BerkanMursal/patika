@@ -1,7 +1,7 @@
 {
   "version": 1,
   "goal": "Build the most complete, licensed, deterministic-identity canonical Turkey park registry (OSM + official municipal sources + future nationwide gap sources), served to the mobile app via Supabase/PostGIS viewport queries rather than a bundled JSON. This session: integrate real municipal adapters one source at a time, checkpoint after each.",
-  "phase": "mobile_park_lifecycle_committed",
+  "phase": "production_rc_applied",
   "current_source": null,
   "completed_sources": [
     {
@@ -355,7 +355,7 @@
     "data/park-enrichment/.cache/ulasav/full-classification.json (gitignored, final result)"
   ],
   "last_successful_command": "node scripts/verify-consolidation-release-candidate.mjs -> all invariants 0; canonical 26,405; backlog 413; manifest 66 clean",
-  "next_step": "Mobile lifecycle support committed and pushed. Remaining before a production RC apply: credentials + read-only production inventory + production DB-only policy, then production migration approval. No production write.",
+  "next_step": "Production holds the RC (26,405 live). On instruction: point mobile env at production; commit environments/production.json + inventory tool.",
   "blockers": [
     {
       "id": "balikesir_no_stable_id",
@@ -601,7 +601,7 @@
       "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Generic Config-Driven Municipal Ingestion Framework' for the full report."
     }
   ],
-  "updated_at": "2026-09-27T15:35:32.469483Z",
+  "updated_at": "2026-09-27T20:02:46.164603Z",
   "overture_gap_analysis": {
     "stage": "gap_analysis_complete_not_merged_not_imported",
     "release": "2026-08-19.0",
@@ -1716,6 +1716,83 @@
       "d0e3c0d feat(mobile): add park lifecycle-aware navigation",
       "55ec75a fix(mobile): remap queued feedings after park consolidation",
       "docs(data): checkpoint mobile park lifecycle support"
+    ]
+  },
+  "production_readonly_inventory": {
+    "date": "2026-09-27",
+    "result": "PRODUCTION INVENTORY NOT RUN",
+    "reason": "no production access: repo not linked, only mobile/.env.local (127.0.0.1), no DB/Supabase env vars, no production config",
+    "tool": "scripts/inventory-production-readonly.mjs",
+    "doc": "docs/CANONICAL_PARK_LIFECYCLE.md section 12",
+    "required_access": [
+      "production Postgres connection string (direct db.<project-ref>.supabase.co:5432 or session pooler, sslmode=require)",
+      "role with SELECT on parks, park_source_refs, feeding_points, feeding_events, observations, favorites, park_name_suggestions, reports, supabase_migrations.schema_migrations (dedicated read-only role preferred)",
+      "password via PGPASSWORD / .pgpass / service file",
+      "psql client (postgresql-client or local container psql as client)"
+    ],
+    "local_tool_test": {
+      "fingerprint_unchanged": true,
+      "server_rejects_writes": true,
+      "preflight_refuses_local": true,
+      "matches_known_local_state": true
+    },
+    "blockers": [
+      "production access",
+      "importer support for KEEP_ACTIVE/KEEP_INACTIVE/MANUAL_REVIEW environment decisions"
+    ],
+    "production_writes": 0,
+    "production_ddl": 0,
+    "production_migrations": 0,
+    "production_rc_imports": 0,
+    "committed": false
+  },
+  "production_apply": {
+    "date": "2026-09-27",
+    "project": "gjrgxpecqztxajlkgqbz",
+    "release_id": "patika-parks-2026-09-27-rc1",
+    "manifest_sha256": "b03bea54af0b8bdfbbdce5208407fffc4bd441a273c532379ac68ff86f3ac88a",
+    "result": "APPLY SUCCESS",
+    "committed_at": "2026-09-27T19:56:43Z",
+    "transaction_seconds": 23.1,
+    "first_apply": {
+      "parks_inserted": 26405,
+      "parks_updated": 0,
+      "general_feeding_points": 26405,
+      "refs_inserted": 27944,
+      "aliases": 33,
+      "tombstones": 33,
+      "tombstone_refs": 33,
+      "reviews": 413,
+      "rejections": 5,
+      "db_only_parks": 0
+    },
+    "verification": {
+      "active_parks": 26405,
+      "osm_backed": 24750,
+      "live_source_refs": 27944,
+      "reviews": 413,
+      "rejections": 5,
+      "aliases": 33,
+      "tombstones": {
+        "taxonomy_review": 30,
+        "non_park": 3
+      },
+      "provinces": 81,
+      "all_invariants_zero": true,
+      "field_mismatches_vs_bundle": 0,
+      "orphan_fks": 0,
+      "anon_get_parks": true
+    },
+    "second_apply": {
+      "result": "NO-OP",
+      "changed_rows": 0
+    },
+    "evidence": "data/park-enrichment/.cache/releases/production-apply-2026-09-27/",
+    "mobile_env_changed": false,
+    "code_committed": true,
+    "commits": [
+      "53ef996 feat(ops): add production park inventory and environment policy",
+      "docs(data): record production canonical release"
     ]
   }
 }

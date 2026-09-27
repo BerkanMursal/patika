@@ -1623,3 +1623,51 @@ Commits on `main` on top of `99073a2`:
 - this docs commit
 
 Two files mixed both concerns (`AppProvider.tsx`, `park-lifecycle-db.test.ts`); commit 1 carries only their navigation parts. The SQL test's SQLSTATE change sits in commit 1 because commit 1's PGlite test runs that suite. NO production DB write, NO production migration, NO RC import.
+
+## Milestone: Production Read-Only Inventory (2026-09-27) — PRODUCTION INVENTORY NOT RUN
+- **No production access exists:**
+  - the repo isn't linked to a Supabase project (no `supabase/.temp/project-ref`)
+  - the only env file, `mobile/.env.local`, points to local 127.0.0.1
+  - no DB or Supabase variables are set in the environment
+  - no production values exist in `eas.json` / `app.config.ts`
+  - nothing was guessed, and no history or secret stores were searched
+- **Prepared** NEW `scripts/inventory-production-readonly.mjs`:
+  - explicit target only; refuses local hosts and uses a server-side preflight refusing loopback or socket connections (`--allow-local` for tool tests only)
+  - `default_transaction_read_only = on` + `BEGIN TRANSACTION READ ONLY` + always `ROLLBACK`, a static write/DDL keyword block, and a required server-confirmed read-only guard
+  - produces the counts, suggestions and reports by status, migration/lifecycle schema state, the RC comparison (parks + refs), DB-only parks with provenance and user history, and parks the release would retire
+  - writes `inventory.json` + `proposed-environment-policy.json` (proposal only, `confirmed: false`, never proposes `TEST_FIXTURE`) under gitignored `.cache/production-inventory/`
+- **Access the user must provide** (details in `docs/CANONICAL_PARK_LIFECYCLE.md` §12):
+  - a direct Postgres connection string for production (`db.<project-ref>.supabase.co:5432` or the session pooler, `sslmode=require`)
+  - a role with SELECT on the listed tables and `supabase_migrations.schema_migrations` (a dedicated read-only role preferred)
+  - the password via PGPASSWORD, `.pgpass` or a service file
+  - a psql client (install postgresql-client, or use the local container's psql as a client)
+- **Tool tested against the LOCAL DB only** with `--allow-local`: results match the known local state (1,981 parks, 1,978 in RC, 3 DB-only, 2,871/2,872 refs); local fingerprint unchanged (0 writes); the server rejected CREATE TEMP TABLE and UPDATE in this session mode; the preflight refused the local target without `--allow-local`.
+- **Known blocker:** the importer's environment policy supports only `fixtures` and `tombstone_user_content_ack`. `KEEP_ACTIVE` / `KEEP_INACTIVE` / `MANUAL_REVIEW` decisions for production DB-only parks need importer support before any production apply.
+- Production writes 0, DDL 0, migrations 0, RC imports 0. Not committed.
+**Next exact step**: the user provides a production read-only connection; run `node scripts/inventory-production-readonly.mjs --psql='…'` and review the proposed policy.
+
+## Milestone: FROZEN RC APPLIED TO PRODUCTION (2026-09-27) — APPLY SUCCESS
+Production project `gjrgxpecqztxajlkgqbz`, applied by explicit user approval. Connection: session pooler `aws-1-eu-west-1.pooler.supabase.com:5432` (the direct host is IPv6-only and unreachable from this machine), password from `~/.pgpass`; no credential was printed or stored in the repo.
+- **Pre-write gate (read-only):**
+  - remote Postgres 17.6; exactly the repo's 16 migrations (including 202609270001)
+  - 7/7 lifecycle tables, `resolve_park_id` and 7/7 integrity triggers present
+  - all 14 data and lifecycle tables at 0 rows
+  - lifecycle functions and constraints byte-identical to the committed migration (35 md5s)
+  - the bundle validated against the pinned manifest `b03bea54…c88a`
+- **Apply:** committed `scripts/apply-canonical-release.mjs --allow-remote` with the new `data/canonical-releases/environments/production.json` (no fixtures, since production was empty). ONE transaction, 23.1 s, committed at 2026-09-27T19:56:43Z.
+  - 26,405 parks inserted, 0 updated; 26,405 general feeding points
+  - 27,944 refs inserted
+  - 33 aliases + 33 tombstones (30 taxonomy_review, 3 non_park) + 33 tombstone refs, written as lifecycle-only records; no fabricated retired parks, `retired_ids_materialised_in_parks` = 0
+  - 413 reviews, 5 rejections; 0 DB-only parks; 0 content moves
+- **Independent read-only verification from production:**
+  - active 26,405, OSM 24,750, refs 27,944, reviews 413 (all open), rejections 5, aliases 33, tombstones 33, 81 provinces
+  - duplicate ids / osm_ids / refs 0; invalid coordinates 0; province outside the official 81 = 0; OSM deterministic id changes 0
+  - bundle-vs-production field mismatches 0 (lat/lon exact; the pooler's `extra_float_digits = 0` only affects display); lost live / tombstone refs 0
+  - orphan FKs 0 in all 7 checks; retired-active 0; alias chains 0; alias/tombstone overlap 0; live ref also review / rejection / tombstone 0
+  - `get_parks` as anon returns 200 in both the Ankara and İzmir boxes and 121 for the "Ordu" search; `get_park` returns 1 for a live park and 0 for a retired one; `resolve_park_id` returns alias / tombstone(taxonomy_review) / tombstone(non_park) / live / not_found as expected
+- **Second run:** NO-OP; the fingerprints of all 14 tables are identical (0 changed rows).
+- **Evidence** (gitignored): `data/park-enrichment/.cache/releases/production-apply-2026-09-27/`.
+- **Not done, per instruction:** mobile env vars unchanged (the app still points to local); no code committed. New uncommitted files: `data/canonical-releases/environments/production.json`, plus the earlier `scripts/inventory-production-readonly.mjs`.
+**Next exact step**: on instruction, point mobile at production and commit the production environment policy and inventory tool.
+
+Committed: `53ef996` feat(ops): add production park inventory and environment policy; then this docs commit ("docs(data): record production canonical release"), pushed to origin/main. No production write and no RC reapply in the commit step.
