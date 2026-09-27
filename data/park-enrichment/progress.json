@@ -1,7 +1,7 @@
 {
   "version": 1,
   "goal": "Build the most complete, licensed, deterministic-identity canonical Turkey park registry (OSM + official municipal sources + future nationwide gap sources), served to the mobile app via Supabase/PostGIS viewport queries rather than a bundled JSON. This session: integrate real municipal adapters one source at a time, checkpoint after each.",
-  "phase": "canonical_release_infrastructure_committed",
+  "phase": "mobile_park_lifecycle_committed",
   "current_source": null,
   "completed_sources": [
     {
@@ -355,7 +355,7 @@
     "data/park-enrichment/.cache/ulasav/full-classification.json (gitignored, final result)"
   ],
   "last_successful_command": "node scripts/verify-consolidation-release-candidate.mjs -> all invariants 0; canonical 26,405; backlog 413; manifest 66 clean",
-  "next_step": "Canonical release infrastructure committed and pushed. Next only on explicit instruction + credentials: read-only production inventory and production DB-only policy file. No production write/migration/import.",
+  "next_step": "Mobile lifecycle support committed and pushed. Remaining before a production RC apply: credentials + read-only production inventory + production DB-only policy, then production migration approval. No production write.",
   "blockers": [
     {
       "id": "balikesir_no_stable_id",
@@ -601,7 +601,7 @@
       "result": "See docs/PARK_DATA_CHECKPOINT.md -> 'Milestone: Generic Config-Driven Municipal Ingestion Framework' for the full report."
     }
   ],
-  "updated_at": "2026-09-27T15:18:17.418389Z",
+  "updated_at": "2026-09-27T15:35:32.469483Z",
   "overture_gap_analysis": {
     "stage": "gap_analysis_complete_not_merged_not_imported",
     "release": "2026-08-19.0",
@@ -1671,6 +1671,51 @@
       "82cec3c feat(db): add canonical park lifecycle schema",
       "2c7ca73 feat(data): add transactional canonical release importer",
       "docs(data): checkpoint canonical release infrastructure"
+    ]
+  },
+  "mobile_park_lifecycle": {
+    "date": "2026-09-27",
+    "files_new": [
+      "mobile/src/components/ParkUnavailable.tsx",
+      "mobile/src/core/offline-queue.ts",
+      "mobile/src/core/park-lifecycle.ts",
+      "mobile/src/state/useParkRoute.ts",
+      "mobile/tests/offline-queue.test.ts",
+      "mobile/tests/park-lifecycle-db.test.ts",
+      "mobile/tests/park-lifecycle.test.ts"
+    ],
+    "files_changed": [
+      "mobile/src/services/repository.ts",
+      "mobile/src/state/AppProvider.tsx",
+      "mobile/src/navigation.ts",
+      "mobile/src/screens/ParkScreen.tsx",
+      "mobile/src/screens/RecordScreen.tsx",
+      "mobile/src/screens/NameSuggestionScreen.tsx",
+      "mobile/src/screens/HistoryScreen.tsx",
+      "supabase/tests/canonical_park_lifecycle.test.sql"
+    ],
+    "tests": {
+      "mobile": "200/200",
+      "sql_local": "49/49",
+      "typecheck": "clean"
+    },
+    "committed": true,
+    "production_write": false,
+    "offline_queue": {
+      "module": "mobile/src/core/offline-queue.ts",
+      "behavior": {
+        "live": "submitted unchanged",
+        "alias": "park_id->survivor; general point (point_id==park_id)->survivor id; custom point kept",
+        "tombstone/not_found": "not submitted, kept with normal error state",
+        "network": "existing retry semantics"
+      },
+      "stored_item_mutated_before_success": false,
+      "tests": "offline-queue.test.ts (12) + 1 PGlite submit_feeding case"
+    },
+    "commits": [
+      "d0e3c0d feat(mobile): add park lifecycle-aware navigation",
+      "55ec75a fix(mobile): remap queued feedings after park consolidation",
+      "docs(data): checkpoint mobile park lifecycle support"
     ]
   }
 }

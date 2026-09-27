@@ -1572,3 +1572,54 @@ Commits on `main` on top of `c77f293`:
 
 Pushed to origin/main. Not committed: the generated bundle (`.cache/releases/`, gitignored and reproducible from the exporter) and local DB dumps (never written to the repo). NO production DB write, NO production migration, NO RC production import.
 **Next exact step**: only on explicit instruction and with credentials, run a read-only production inventory and write a production DB-only policy file.
+
+## Milestone: Mobile Park Lifecycle Support (2026-09-27) — DONE locally, NOT committed
+The mobile app now resolves park ids live-first:
+- It calls `get_park` exactly as before.
+- Only when that finds nothing does it call `resolve_park_id`.
+- It follows at most one merge hop.
+- It maps the result to show, redirect once (loop guard via `redirectedFrom`), or a plain unavailable state.
+
+New files:
+- `mobile/src/core/park-lifecycle.ts` (pure: parse, lookup, route action, user copy, favorites view)
+- `mobile/src/state/useParkRoute.ts` (shared hook)
+- `mobile/src/components/ParkUnavailable.tsx`
+
+Changes to existing code:
+- `repository.resolveParkId`: a missing RPC means "not found", so the current backend behaves as before.
+- `AppProvider.resolvePark`.
+- The Park, Record, Observe and SuggestName screens: all four are deep-linkable with a park id.
+- Favorites: merged ids show their survivor; retired ids stay visible with an explicit unfollow button.
+
+Tests:
+- `mobile/tests/park-lifecycle.test.ts`
+- `mobile/tests/park-lifecycle-db.test.ts`: PGlite on a fresh migration chain; runs the committed lifecycle SQL suite and the real client resolver against `get_park` / `resolve_park_id`.
+- `supabase/tests/canonical_park_lifecycle.test.sql`: one assertion now accepts 23001 or 23503. Newer Postgres reports a RESTRICT violation as 23001; the schema is unchanged.
+
+Results: mobile suite 189/189 (22 new), typecheck clean, Prettier clean on touched files, SQL lifecycle suite 49/49 on local Docker. No RC import, no production write, no data change.
+
+### Offline feeding queue lifecycle support — DONE locally, NOT committed (2026-09-27)
+- **Queue:** it lives in `AppProvider`. AsyncStorage key `patika.queue.<ns>.<userId>`; items are `Pending` = `FeedingDraft` (`park_id`, `point_id`, `photo_uri`, …) plus `status` / `attempts` / `error`; writes are serialized by `writeQueue`; there is one `sync()` loop. No second queue was created.
+- **New `mobile/src/core/offline-queue.ts`:**
+  - `prepareQueuedFeeding` / `submitQueuedFeeding` resolve the queued park through the central `resolvePark` right before submitting.
+  - **Live:** the payload is submitted unchanged (the identical object).
+  - **Merged:** `park_id` becomes the survivor. The general point (`point_id == park_id`) becomes the survivor's general point (id = survivor id). A custom point keeps its id.
+  - **Retired or unknown:** not submitted; the item stays queued in the normal failed / retry / cancel state with a plain message.
+  - **Network error:** the existing retry semantics.
+  - Only the outgoing payload is adapted; the stored item changes only through the existing success or failure transition. `completeQueuedFeeding` and `failQueuedFeeding` were extracted verbatim from `AppProvider.sync`, which now uses them.
+- **Tests:**
+  - NEW `mobile/tests/offline-queue.test.ts`: 12 tests covering the 10 required cases.
+  - `park-lifecycle-db.test.ts` +1 PGlite case with the production `submit_feeding` (location + points migrations added to that chain). The old un-remapped payload is rejected; the remapped general-point and custom-point payloads are accepted and stored on the survivor.
+- **Regression:** mobile suite 200/200, `tsc --noEmit` clean, Prettier clean on changed files, SQL lifecycle suite 49/49 (local Docker). No canonical data change, no production migration, no RC import, no commit or push.
+
+### Mobile park lifecycle support COMMITTED (2026-09-27)
+Validation before commit:
+- mobile suite 200/200, `tsc --noEmit` clean, Prettier clean on changed files, SQL lifecycle suite 49/49 (local Docker)
+- scans clean: no secrets, no localhost or connection strings in app code, no debug logging, no hard-coded lifecycle ids in `src`
+
+Commits on `main` on top of `99073a2`:
+- `d0e3c0d` feat(mobile): add park lifecycle-aware navigation. Verified in isolation in a clean worktree: `tsc` clean, 189/189.
+- `55ec75a` fix(mobile): remap queued feedings after park consolidation
+- this docs commit
+
+Two files mixed both concerns (`AppProvider.tsx`, `park-lifecycle-db.test.ts`); commit 1 carries only their navigation parts. The SQL test's SQLSTATE change sits in commit 1 because commit 1's PGlite test runs that suite. NO production DB write, NO production migration, NO RC import.
