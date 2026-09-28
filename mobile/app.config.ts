@@ -51,6 +51,6 @@ const config: ExpoConfig = {
     favicon: './assets/favicon.png',
     name: 'Patika — Bir kap, bir umut',
   },
-  extra: { eas: { projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID } },
+  extra: { eas: { projectId: '595cdff6-b974-4ad5-a2d8-da3be0262d34' } },
 };
 export default config;
